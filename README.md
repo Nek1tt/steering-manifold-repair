@@ -1,130 +1,137 @@
 # Steering Manifold Repair
 
-A compact research baseline for studying the fluency/concept trade-off of activation steering in GPT-2 Small, designed to grow into steering-aware manifold repair experiments.
+Research scaffold for the interpretability task: first reproduce a valid activation-steering concept/fluency Pareto frontier, then study cheap ways to repair the fluency degradation.
 
-## Research question
+## Current status
 
-Naive activation steering adds a concept direction to a hidden state,
+The first SAE-feature reproduction attempt is preserved as a **failed baseline-vector validation** in:
 
-$$
-\tilde h = h + \alpha v,
-$$
+```text
+experiments/failed_sae_profanity/
+```
 
-which can increase the desired feature while moving the activation away from the distribution seen during language-model training. This repository first reproduces that trade-off with a fully local evaluation pipeline, then provides a clean interface for adding repair methods such as denoisers and direction-preserving corrections.
+That run strongly changed GPT-2 behavior but never increased the intended generated-text concept, so it is not used as the control experiment.
 
-The baseline intentionally separates:
+The active reproduction baseline is now a **persona-style contrastive sentiment direction** on GPT-2 Small at the midpoint layer:
 
-1. **intervention** — how the steering vector is added;
-2. **repair** — optional post-processing of the steered activation;
-3. **evaluation** — text fluency and concept strength;
-4. **analysis** — Pareto curves and activation-level diagnostics.
+\[
+v = \mathbb{E}[h\mid\text{positive}] - \mathbb{E}[h\mid\text{negative}],
+\]
 
-## Baseline configuration
+followed by the literal steering intervention
 
-The default experiment uses:
+\[
+h' = h + \alpha v.
+\]
 
-- model: `gpt2-small` via TransformerLens;
-- intervention location: `blocks.8.hook_resid_post`;
-- SAE: OpenAI GPT-2 Small `v5_128k`, `resid_post_mlp`, layer 8;
-- default feature: **56907**, described in OpenAI's SAE viewer source as "words in quotes";
-- steering applied only to the last token state used to predict the next generated token;
-- steering strength expressed as a ratio of the residual-stream norm, which makes the sweep easier to interpret than raw decoder-vector coefficients.
+This is deliberately close to the task's recommended Persona Vectors evaluation philosophy while staying small, local, and fast.
 
-Layer 8 is used for the first reproducible baseline because OpenAI publicly lists human-interpretable features for that checkpoint. The code is configurable and can be switched to layer 6 for the assignment's midpoint-layer setting once a layer-6 validation feature set is fixed.
+## Active baseline
 
-## Metrics
-
-Each generated continuation is evaluated with the **clean, unsteered GPT-2** and the SAE:
-
-- `nll`: mean negative log-likelihood of the generated continuation under clean GPT-2;
-- `ppl`: perplexity from that NLL;
-- `distinct_1/2/3`: lexical diversity;
-- `repetition_3gram`: repeated 3-gram rate;
-- `concept_sae_mean/max/firing_rate`: target SAE feature activation on continuation tokens;
-- `quoted_span_rate`: a simple text-level corroborating metric for the default "words in quotes" feature.
-
-The primary Pareto plot uses `-NLL` on x (higher is more fluent) and SAE feature activation on y (higher is more concept).
+- LM: GPT-2 Small (`gpt2`)
+- Intervention point: `blocks.6.hook_resid_post`
+- Direction: mean activation difference from 30 matched positive/negative sentences
+- Direction extraction: mean of the final 4 token activations for each sentence
+- Steering positions: response/current token only during autoregressive generation
+- Strength mode: literal `h + alpha * v`
+- Concept judge: local `distilbert-base-uncased-finetuned-sst-2-english`
+- Concept score: mean probability of **positive sentiment**, 0-100
+- Fluency diagnostics: clean GPT-2 NLL, distinct-1/2/3, 3-gram repetition
+- Pareto x-axis: a baseline-anchored composite of clean-NLL, distinct-3, and anti-repetition so degenerate low-diversity generations cannot look artificially fluent merely because their NLL decreases
 
 ## Installation
-
-Python 3.10+ is recommended.
 
 ```bash
 pip install -r requirements.txt
 pip install -e .
 ```
 
-The OpenAI SAE **weights** are downloaded from the official public blob storage at runtime. We intentionally do not install the historical `openai/sparse_autoencoder` package because its metadata pins `torch==2.1.0`, `transformer_lens==1.9.1`, and `blobfile==2.0.2`, which conflicts with modern Colab environments. A small inference-only compatibility reader lives in `src/steering_repair/sae.py`.
+A Hugging Face token is optional but recommended in Colab to avoid anonymous download rate limits.
 
-## Run the baseline
+## 1. Validate the direction first
+
+Do **not** run the full sweep until this passes:
 
 ```bash
-python scripts/run_baseline.py --config configs/baseline_gpt2.yaml
-python scripts/plot_baseline.py \
-  --input results/baseline_samples.csv \
-  --output results/baseline_pareto.png
+python scripts/validate_sentiment_baseline.py \
+  --config configs/baseline_sentiment_gpt2.yaml
 ```
 
-The generation script saves one row per `(prompt, seed, strength)` and shows progress with `tqdm`.
+The validator:
 
-For a quick smoke run, reduce `max_new_tokens`, prompts, seeds, and strength grid in the YAML file.
+1. extracts the positive-minus-negative direction at layer 6;
+2. checks that positive examples project higher than negative examples;
+3. uses held-out calibration prompts to choose the causal sign if necessary;
+4. sweeps alpha on those calibration prompts;
+5. requires a measurable increase in independent text-level sentiment score;
+6. saves the calibrated direction to `results/sentiment_direction.pt`.
 
-## Expected experiment ladder
+## 2. Run the full baseline
 
-The baseline is deliberately structured for the research direction rather than only reproducing the assignment's suggested denoiser:
+```bash
+python scripts/run_sentiment_baseline.py \
+  --config configs/baseline_sentiment_gpt2.yaml
 
-| Stage | Method | Purpose |
-|---|---|---|
-| B0 | no steering | reference |
-| B1 | additive steering | required Pareto baseline |
-| B2 | simple norm-preserving repair | cheap non-learned control |
-| B3 | Gaussian denoiser | assignment-proposed learned baseline |
-| M1 | structured-corruption denoiser | train on generic semantic perturbations, not validation vectors |
-| M2 | direction-preserving repair | remove denoiser correction parallel to the intended steering direction |
-| M3 | structured + direction-preserving | main candidate method |
+python scripts/plot_sentiment_baseline.py \
+  --config configs/baseline_sentiment_gpt2.yaml
+```
 
-A future direction-preserving repair can be written as
+Expected qualitative result: as alpha grows, positive-sentiment score should rise; at sufficiently strong intervention, fluency should degrade. This gives the concept/fluency Pareto curve required before any denoiser or repair method is evaluated.
 
-$$
-\Delta = D(h + \alpha v) - (h + \alpha v),
-$$
+Outputs:
 
-$$
-\Delta_\perp = \Delta - \frac{\langle \Delta, v\rangle}{\|v\|^2}v,
-$$
+```text
+results/sentiment_validation.json
+results/sentiment_direction.pt
+results/sentiment_baseline_samples.csv
+results/sentiment_baseline_pareto.png
+```
 
-$$
-h_{\text{repair}} = h + \alpha v + \beta\Delta_\perp.
-$$
+## Why the previous SAE baseline is archived
 
-This directly tests whether a denoiser improves fluency by repairing off-direction/off-manifold components rather than merely cancelling the steering vector.
+The failed OpenAI-SAE profanity run produced concept score `0.0` at every tested alpha while diversity eventually collapsed. This demonstrates that an interpretable SAE feature is not automatically a useful causal steering vector. The full aggregate table and exact configuration are preserved under `experiments/failed_sae_profanity/` rather than discarded.
 
 ## Repository layout
 
 ```text
-configs/                   experiment configuration
-data/prompts.txt           fixed neutral continuation prompts
-notebooks/                 Colab entry point
-scripts/run_baseline.py    generation + evaluation
-scripts/plot_baseline.py   aggregate Pareto plot
+configs/
+  baseline_sentiment_gpt2.yaml    active reproduction baseline
+  baseline_gpt2.yaml              legacy SAE experiment config
+
+data/
+  sentiment_positive.txt          direction construction data
+  sentiment_negative.txt
+  calibration_prompts.txt         held-out vector calibration prompts
+  prompts.txt                     full evaluation prompts
+
+experiments/
+  failed_sae_profanity/           archived negative reproduction result
+
+scripts/
+  validate_sentiment_baseline.py
+  run_sentiment_baseline.py
+  plot_sentiment_baseline.py
+  validate_baseline.py             legacy SAE validator
+  run_baseline.py                  legacy SAE runner
+  plot_baseline.py                 legacy SAE plotter
+
 src/steering_repair/
-  config.py                YAML dataclasses
-  sae.py                   OpenAI SAE loading and decoder directions
-  steering.py              intervention and repair hooks
-  generation.py            deterministic autoregressive generation
-  metrics.py               fluency + concept metrics
-  experiment.py            end-to-end baseline loop
-  plotting.py              plotting helpers
-tests/                     local unit tests without model downloads
+  steering.py                     activation hooks / repair interface
+  generation.py                   cached autoregressive generation
+  sentiment_baseline.py           contrastive-vector baseline pipeline
+  sae.py                           OpenAI SAE compatibility reader
+  metrics.py                      text and likelihood metrics
+
+tests/
 ```
 
-## Reproducibility rules
+## Reproducibility rules for later repair experiments
 
-- Fix prompts and seeds before comparing repair methods.
-- Validation/test SAE feature IDs must be split before denoiser training.
-- A learned repair model must not train on the held-out steering vectors used for evaluation.
-- Report both text-level metrics and internal activation diagnostics.
-- Compare learned repair against simply using a smaller steering strength; otherwise a denoiser can appear successful by silently cancelling the intervention.
+- Freeze the active baseline prompts, seeds, direction-construction data, and judge before comparing repair methods.
+- Train future denoisers without using the held-out validation steering directions.
+- Compare any repair method against a smaller steering coefficient; otherwise a denoiser can appear successful simply by cancelling the intervention.
+- Keep text-level concept metrics separate from mechanistic activation diagnostics.
+- Do not move to repair experiments until the additive baseline itself visibly reproduces the required trade-off.
 
 ## References
 
