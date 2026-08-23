@@ -41,6 +41,11 @@ def main() -> None:
             cfg["denoisers"][checkpoint_name]["checkpoint"], device=device
         )
         for corruption_kind in ("gaussian", "structured"):
+            # Reset RNG so both checkpoints see exactly the same held-out corruptions.
+            eval_seed = 9917 if corruption_kind == "gaussian" else 9918
+            torch.manual_seed(eval_seed)
+            if torch.cuda.is_available():
+                torch.cuda.manual_seed_all(eval_seed)
             metrics = evaluate_denoiser(
                 model,
                 val,
