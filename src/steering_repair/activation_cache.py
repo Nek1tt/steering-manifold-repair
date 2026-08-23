@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Iterable
 
 import torch
 from tqdm.auto import tqdm
@@ -9,7 +10,9 @@ from tqdm.auto import tqdm
 
 @dataclass(frozen=True)
 class ActivationCacheConfig:
-    dataset_name: str = "wikitext"
+    # Use the canonical Hub repository name. The historical shorthand
+    # ``wikitext`` has become brittle across recent datasets/hub releases.
+    dataset_name: str = "Salesforce/wikitext"
     dataset_config: str | None = "wikitext-2-raw-v1"
     split: str = "train"
     text_field: str = "text"
@@ -21,15 +24,71 @@ class ActivationCacheConfig:
     token_stride: int = 1
     val_fraction: float = 0.10
     seed: int = 1234
+    streaming: bool = True
+
+
+def _load_dataset_with_fallback(cfg: ActivationCacheConfig):
+    """Load generic text without depending on legacy Hub dataset scripts.
+
+    Hugging Face converted WikiText to Parquet and recent ``datasets`` releases
+    no longer execute remote loading scripts.  The canonical repository usually
+    loads directly, but an explicit Parquet fallback keeps Colab runs robust
+    against alias/config resolution regressions in ``datasets`` / hub clients.
+    """
+
+    from datasets import load_dataset
+
+    errors: list[str] = []
+    requested = cfg.dataset_name
+    candidates: list[str] = []
+    # Prefer the canonical repository even when an old config still says
+    # ``wikitext``.
+    if requested in {"wikitext", "Salesforce/wikitext"}:
+        candidates.append("Salesforce/wikitext")
+    if requested not in candidates:
+        candidates.append(requested)
+
+    for name in candidates:
+        try:
+            kwargs = {
+                "split": cfg.split,
+                "streaming": cfg.streaming,
+            }
+            if cfg.dataset_config:
+                return load_dataset(name, cfg.dataset_config, **kwargs)
+            return load_dataset(name, **kwargs)
+        except Exception as exc:  # pragma: no cover - exercised by Hub failures
+            errors.append(f"load_dataset({name!r}, config={cfg.dataset_config!r}): {exc!r}")
+
+    # Current Salesforce/wikitext is native Parquet.  Loading the Parquet files
+    # explicitly avoids all remote-script/config machinery.  This path is also
+    # useful with datasets>=4 where remote scripts are disabled entirely.
+    if requested in {"wikitext", "Salesforce/wikitext"} and cfg.dataset_config:
+        pattern = (
+            "hf://datasets/Salesforce/wikitext/"
+            f"{cfg.dataset_config}/{cfg.split}-*.parquet"
+        )
+        try:
+            return load_dataset(
+                "parquet",
+                data_files={cfg.split: pattern},
+                split=cfg.split,
+                streaming=cfg.streaming,
+            )
+        except Exception as exc:  # pragma: no cover - exercised by Hub failures
+            errors.append(f"explicit Parquet fallback {pattern!r}: {exc!r}")
+
+    joined = "\n  - ".join(errors)
+    raise RuntimeError(
+        "Could not load the generic activation-caching corpus. Attempts:\n"
+        f"  - {joined}\n"
+        "If Hugging Face is temporarily rate-limited, set HF_TOKEN and rerun "
+        "only scripts/cache_activations.py."
+    )
 
 
 def load_generic_texts(cfg: ActivationCacheConfig) -> list[str]:
-    from datasets import load_dataset
-
-    if cfg.dataset_config:
-        ds = load_dataset(cfg.dataset_name, cfg.dataset_config, split=cfg.split)
-    else:
-        ds = load_dataset(cfg.dataset_name, split=cfg.split)
+    ds = _load_dataset_with_fallback(cfg)
 
     texts: list[str] = []
     for row in ds:
@@ -80,6 +139,11 @@ def cache_layer_activations(
             names_filter=[hook_name],
             return_type=None,
         )
+        if hook_name not in cache:
+            raise KeyError(
+                f"Requested activation hook {hook_name!r} was not cached. "
+                f"Available matching keys: {[k for k in cache.keys() if 'resid' in k][-10:]}"
+            )
         acts = cache[hook_name]
 
         for row_idx, length in enumerate(lengths):
@@ -102,6 +166,10 @@ def cache_layer_activations(
     if not collected:
         raise RuntimeError("Activation cache is empty")
     all_acts = torch.cat(collected, dim=0)[: cfg.max_activations]
+    if all_acts.shape[0] < 2:
+        raise RuntimeError("Need at least two cached activations for a train/validation split")
+    if not torch.isfinite(all_acts.float()).all():
+        raise RuntimeError("Activation cache contains NaN or Inf values")
 
     generator = torch.Generator().manual_seed(cfg.seed)
     perm = torch.randperm(all_acts.shape[0], generator=generator)
@@ -122,6 +190,7 @@ def cache_layer_activations(
         "dataset_name": cfg.dataset_name,
         "dataset_config": cfg.dataset_config,
         "split": cfg.split,
+        "streaming": cfg.streaming,
         "max_seq_tokens": cfg.max_seq_tokens,
         "seed": cfg.seed,
     }
@@ -138,4 +207,11 @@ def load_activation_cache(path: str | Path) -> dict:
     payload = torch.load(path, map_location="cpu", weights_only=False)
     if "train" not in payload or "val" not in payload:
         raise ValueError(f"Invalid activation cache: {path}")
+    train = payload["train"]
+    val = payload["val"]
+    if train.ndim != 2 or val.ndim != 2 or train.shape[-1] != val.shape[-1]:
+        raise ValueError(
+            f"Invalid activation cache tensor shapes: train={tuple(train.shape)}, "
+            f"val={tuple(val.shape)}"
+        )
     return payload
