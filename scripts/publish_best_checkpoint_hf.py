@@ -12,11 +12,11 @@ from huggingface_hub import HfApi, create_repo
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Publish the final Gaussian activation-denoiser checkpoint used with DPAR"
+        description="Опубликовать финальный Gaussian activation-denoiser checkpoint для DPAR"
     )
-    parser.add_argument("--checkpoint", required=True, help="Path to retrained_denoiser_gaussian.pt")
-    parser.add_argument("--repo-id", required=True, help="Hugging Face repo, e.g. Nek1tt/steering-repair-gpt2")
-    parser.add_argument("--private", action="store_true", help="Create a private repo (assignment requires public, so omit this)")
+    parser.add_argument("--checkpoint", required=True, help="Путь к retrained_denoiser_gaussian.pt")
+    parser.add_argument("--repo-id", required=True, help="Hugging Face repo, например Nek1tt/steering-repair-gpt2")
+    parser.add_argument("--private", action="store_true", help="Создать private repo; для задания этот флаг использовать не нужно")
     args = parser.parse_args()
 
     checkpoint_path = Path(args.checkpoint)
@@ -27,9 +27,9 @@ def main() -> None:
     required = {"state_dict", "d_model", "hidden_dim", "kind", "train_config", "cache_metadata", "best_val_mse"}
     missing = sorted(required - set(payload))
     if missing:
-        raise RuntimeError(f"Checkpoint is missing expected fields: {missing}")
+        raise RuntimeError(f"В checkpoint отсутствуют ожидаемые поля: {missing}")
     if payload.get("kind") != "gaussian":
-        raise RuntimeError(f"Expected Gaussian denoiser checkpoint, got kind={payload.get('kind')!r}")
+        raise RuntimeError(f"Ожидался Gaussian denoiser checkpoint, получен kind={payload.get('kind')!r}")
 
     metadata = {
         "architecture": "ResidualActivationDenoiser",
@@ -45,7 +45,7 @@ def main() -> None:
             "method": "Direction-Preserving Activation Repair (DPAR)",
             "formula": "z=h+alpha*v; raw=D(z)-z; correction=raw-proj_v(raw); output=z+correction",
             "beta": 1.0,
-            "note": "DPAR projection is inference-time geometry and is not encoded in the checkpoint weights.",
+            "note": "DPAR — inference-time geometry; она не закодирована непосредственно в weights checkpoint.",
         },
     }
 
@@ -67,11 +67,11 @@ def main() -> None:
             repo_id=args.repo_id,
             repo_type="model",
             folder_path=str(folder),
-            commit_message="Publish final DPAR Gaussian activation denoiser",
+            commit_message="Обновить финальный DPAR Gaussian activation denoiser",
         )
 
-    print(f"Published: https://huggingface.co/{args.repo_id}")
-    print("Add this URL to README.md / FINAL_RESULTS.md before submission.")
+    print(f"Опубликовано: https://huggingface.co/{args.repo_id}")
+    print("Публичный URL должен быть указан в README.md и report/README.md.")
 
 
 if __name__ == "__main__":
