@@ -6,6 +6,8 @@
 
 Полный отчёт: **[`report/README.md`](report/README.md)**.
 
+Пошаговая проверка из чистого окружения: **[`REPRODUCIBILITY.md`](REPRODUCIBILITY.md)**.
+
 Лучший обученный checkpoint опубликован открыто на Hugging Face:
 
 **https://huggingface.co/Nek1tt/steering-repair-gpt2**
@@ -52,6 +54,8 @@ Baseline воспроизводит требуемый trade-off: concept рас
 | [`selective_jrr`](experiments/selective_jrr/) | selective repair нелинейного остатка | частично положительный механизм; strong-regime gate не пройден |
 
 ## Воспроизведение
+
+Подробный clean-room протокол: [`REPRODUCIBILITY.md`](REPRODUCIBILITY.md).
 
 Установка:
 
@@ -105,12 +109,13 @@ DPAR — это inference-time геометрия поверх этого checkp
 ## Структура
 
 ```text
-report/        финальный отчёт
-experiments/   компактные результаты и разбор отдельных экспериментов
-notebooks/     воспроизводимые сценарии запуска
-configs/       зафиксированные конфиги
-src/           реализация методов
-scripts/       CLI для обучения, evaluation и preflight
-tests/         unit tests
-huggingface/   шаблон model card и публикация checkpoint
+report/              финальный отчёт
+REPRODUCIBILITY.md   clean-room проверка воспроизводимости
+experiments/         компактные результаты и разбор отдельных экспериментов
+notebooks/           воспроизводимые сценарии запуска
+configs/             зафиксированные конфиги
+src/                 реализация методов
+scripts/             CLI для обучения, evaluation и preflight
+tests/               unit tests
+huggingface/         шаблон model card и публикация checkpoint
 ```
