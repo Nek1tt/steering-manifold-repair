@@ -185,6 +185,8 @@ $$
 
 Calibration выбирает `beta=0.25` и для DPAR, и для vanilla, но dense held-out sweep показывает, что оптимальный масштаб зависит от concept region.
 
+Важно: held-out method set был зафиксирован **до** просмотра evaluation. Помимо additive и calibration-selected variants в него по протоколу всегда входили full Gaussian `beta=1` и full DPAR `beta=1` как обязательные full-repair controls. Поэтому high-concept результат full DPAR при `beta=1` ниже не является post-hoc выбором `beta` по held-out: этот control оценивался независимо от calibration winner.
+
 Interpolated held-out frontier:
 
 | метод | F@C80 | F@C85 | F@C90 | F@C95 |
@@ -263,7 +265,9 @@ $$
 y_{repair}=y_\alpha-R_\perp.
 $$
 
-Calibration дала `F@C80=100.00` против `45.49` у additive и открыла frozen held-out. Этот calibration gain **не переносится в отчёт как held-out effect size**.
+Первый короткий calibration attempt использовал несовпадающие с diagnostic behavior probe generation length/grid и не достигал даже требуемого concept support у additive control. Этот attempt был объявлен невалидным **до открытия held-out**. Финальный calibration был перезапущен с согласованными 8 prompts, 32-token generation, полным `alpha` grid и seed `37`; выбранный target layer и `beta=1` при этом не менялись.
+
+Финальный calibration дал `F@C80=100.00` против `45.49` у additive и открыл frozen held-out. Этот calibration gain **не переносится в отчёт как held-out effect size**.
 
 В held-out manual oracle protocol обе кривые после усреднения seeds не достигли заранее выбранных C80/C85/C90; confirmatory frontier поэтому **не оценивается**, а не считается победой или поражением.
 
@@ -370,7 +374,7 @@ go_to_new_heldout = false
 
 ### Есть ли метод, работающий лучше additive steering
 
-Да, но утверждение намеренно локальное: dense held-out показывает **+4.99 fluency points на C90** для full DPAR относительно additive. В других concept regions DPAR не доминирует, и это прямо отражено в отчёте.
+Да, но утверждение намеренно локальное: dense held-out показывает **+4.99 fluency points на C90** для заранее включённого full-DPAR control относительно additive. В других concept regions DPAR не доминирует, и это прямо отражено в отчёте.
 
 ### Анализ «почему и как»
 
