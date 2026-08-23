@@ -21,7 +21,10 @@ R=y_\alpha-y_0-\alpha t,
 $$
 
 $$
-R_\perp=R-\operatorname{proj}_t(R).
+R_\perp
+=
+R-
+\frac{\langle R,t\rangle}{\langle t,t\rangle}t.
 $$
 
 Далее на steered downstream state вычисляется локальный clean-distribution objective:
@@ -35,7 +38,10 @@ $$
 Чтобы не менять first-order transported steering, gradient ортогонализуется относительно `t`:
 
 $$
-g_\perp=g-\operatorname{proj}_t(g).
+g_\perp
+=
+g-
+\frac{\langle g,t\rangle}{\langle t,t\rangle}t.
 $$
 
 Из `R_orth` выбирается только KL-increasing component:
