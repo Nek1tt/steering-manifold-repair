@@ -1,10 +1,14 @@
 import torch
 
-from steering_repair.sae import OpenAIGPT2SAE, _openai_v5_path, decoder_direction
+from steering_repair.sae import (
+    OpenAIGPT2SAE,
+    _openai_v5_path,
+    decoder_direction,
+    feature_pre_activation,
+)
 
 
 def _fake_topk_sae() -> OpenAIGPT2SAE:
-    # d_model=3, n_latents=4
     state = {
         "pre_bias": torch.zeros(3),
         "encoder.weight": torch.tensor(
@@ -46,5 +50,11 @@ def test_local_sae_topk_encode_shape_and_sparsity():
 def test_decoder_direction_is_decoder_column_and_unit_norm():
     sae = _fake_topk_sae()
     v = decoder_direction(sae, 1, unit_norm=True)
-    expected = torch.tensor([0.0, 1.0, 0.0])
-    assert torch.allclose(v, expected)
+    assert torch.allclose(v, torch.tensor([0.0, 1.0, 0.0]))
+
+
+def test_feature_pre_activation_preserves_batch_shape():
+    sae = _fake_topk_sae()
+    x = torch.randn(5, 3)
+    score = feature_pre_activation(sae, x, 1)
+    assert score.shape == (5,)
