@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable
 
 import torch
 from tqdm.auto import tqdm
@@ -31,7 +30,7 @@ def _load_dataset_with_fallback(cfg: ActivationCacheConfig):
     """Load generic text without depending on legacy Hub dataset scripts.
 
     Hugging Face converted WikiText to Parquet and recent ``datasets`` releases
-    no longer execute remote loading scripts.  The canonical repository usually
+    no longer execute remote loading scripts. The canonical repository usually
     loads directly, but an explicit Parquet fallback keeps Colab runs robust
     against alias/config resolution regressions in ``datasets`` / hub clients.
     """
@@ -41,8 +40,6 @@ def _load_dataset_with_fallback(cfg: ActivationCacheConfig):
     errors: list[str] = []
     requested = cfg.dataset_name
     candidates: list[str] = []
-    # Prefer the canonical repository even when an old config still says
-    # ``wikitext``.
     if requested in {"wikitext", "Salesforce/wikitext"}:
         candidates.append("Salesforce/wikitext")
     if requested not in candidates:
@@ -50,19 +47,15 @@ def _load_dataset_with_fallback(cfg: ActivationCacheConfig):
 
     for name in candidates:
         try:
-            kwargs = {
-                "split": cfg.split,
-                "streaming": cfg.streaming,
-            }
+            kwargs = {"split": cfg.split, "streaming": cfg.streaming}
             if cfg.dataset_config:
                 return load_dataset(name, cfg.dataset_config, **kwargs)
             return load_dataset(name, **kwargs)
-        except Exception as exc:  # pragma: no cover - exercised by Hub failures
+        except Exception as exc:  # pragma: no cover - depends on Hub state
             errors.append(f"load_dataset({name!r}, config={cfg.dataset_config!r}): {exc!r}")
 
-    # Current Salesforce/wikitext is native Parquet.  Loading the Parquet files
-    # explicitly avoids all remote-script/config machinery.  This path is also
-    # useful with datasets>=4 where remote scripts are disabled entirely.
+    # Current Salesforce/wikitext is native Parquet. Loading the files
+    # explicitly avoids remote-script/config machinery used by older datasets.
     if requested in {"wikitext", "Salesforce/wikitext"} and cfg.dataset_config:
         pattern = (
             "hf://datasets/Salesforce/wikitext/"
@@ -75,7 +68,7 @@ def _load_dataset_with_fallback(cfg: ActivationCacheConfig):
                 split=cfg.split,
                 streaming=cfg.streaming,
             )
-        except Exception as exc:  # pragma: no cover - exercised by Hub failures
+        except Exception as exc:  # pragma: no cover - depends on Hub state
             errors.append(f"explicit Parquet fallback {pattern!r}: {exc!r}")
 
     joined = "\n  - ".join(errors)
@@ -103,6 +96,18 @@ def load_generic_texts(cfg: ActivationCacheConfig) -> list[str]:
     return texts
 
 
+def _stop_at_layer_for_hook(hook_name: str) -> int | None:
+    """Return the earliest safe TransformerLens stop layer for resid_post hooks."""
+
+    parts = hook_name.split(".")
+    if len(parts) >= 3 and parts[0] == "blocks" and parts[2] == "hook_resid_post":
+        try:
+            return int(parts[1]) + 1
+        except ValueError:
+            return None
+    return None
+
+
 @torch.no_grad()
 def cache_layer_activations(
     model,
@@ -114,11 +119,14 @@ def cache_layer_activations(
     """Collect natural residual-stream activations from generic text.
 
     Right padding cannot affect earlier causal-prefix states, so only valid token
-    positions are retained and padding positions are discarded.
+    positions are retained and padding positions are discarded. For a
+    ``blocks.N.hook_resid_post`` target we stop immediately after block N; later
+    transformer blocks and the unembedding are unnecessary for caching.
     """
 
     collected: list[torch.Tensor] = []
     total = 0
+    stop_at_layer = _stop_at_layer_for_hook(hook_name)
     batches = range(0, len(texts), cfg.batch_size)
     pbar = tqdm(batches, desc="cache layer activations", unit="batch")
     for start in pbar:
@@ -138,6 +146,7 @@ def cache_layer_activations(
             tokens,
             names_filter=[hook_name],
             return_type=None,
+            stop_at_layer=stop_at_layer,
         )
         if hook_name not in cache:
             raise KeyError(
@@ -182,6 +191,7 @@ def cache_layer_activations(
     }
     metadata = {
         "hook_name": hook_name,
+        "stop_at_layer": stop_at_layer,
         "n_total": int(all_acts.shape[0]),
         "n_train": int(payload["train"].shape[0]),
         "n_val": int(payload["val"].shape[0]),
@@ -200,7 +210,13 @@ def cache_layer_activations(
 def save_activation_cache(path: str | Path, payload: dict, metadata: dict) -> None:
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    torch.save({**payload, "metadata": metadata}, path)
+    tmp = path.with_name(path.name + ".tmp")
+    try:
+        torch.save({**payload, "metadata": metadata}, tmp)
+        tmp.replace(path)
+    finally:
+        if tmp.exists():
+            tmp.unlink()
 
 
 def load_activation_cache(path: str | Path) -> dict:
@@ -214,4 +230,6 @@ def load_activation_cache(path: str | Path) -> dict:
             f"Invalid activation cache tensor shapes: train={tuple(train.shape)}, "
             f"val={tuple(val.shape)}"
         )
+    if train.shape[0] < 1 or val.shape[0] < 1:
+        raise ValueError("Activation cache has an empty train or validation split")
     return payload
