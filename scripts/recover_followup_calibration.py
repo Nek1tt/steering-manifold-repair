@@ -9,6 +9,7 @@ import yaml
 from steering_repair.inference_followups import (
     ScaledRepairSpec,
     aggregate_repairs,
+    build_calibration_specs,
     calibration_selection,
     run_scaled_evaluation,
     save_selection,
@@ -41,12 +42,41 @@ def main() -> None:
     if existing.empty:
         raise ValueError(f"{sample_path} is empty")
 
+    # The original bug happened only after run_scaled_evaluation finished: the
+    # aggregate step required additive alpha=0, but the config omitted zero.
+    # Before reusing the expensive generations, verify that every intended
+    # non-zero (method, alpha, seed) job is actually present.
+    phase_cfg = cfg["followup"]["calibration"]
+    specs = build_calibration_specs(cfg)
+    expected = {
+        (spec.name, float(alpha), int(seed))
+        for spec in specs
+        for alpha in phase_cfg["strengths"]
+        if float(alpha) != 0.0
+        for seed in phase_cfg["seeds"]
+    }
+    observed = {
+        (str(row.method), float(row.strength), int(row.seed))
+        for row in existing[["method", "strength", "seed"]]
+        .drop_duplicates()
+        .itertuples(index=False)
+    }
+    missing = sorted(expected - observed)
+    if missing:
+        preview = "\n  ".join(map(str, missing[:12]))
+        raise RuntimeError(
+            "Saved calibration CSV is incomplete, so it is unsafe to recover it. "
+            f"Missing {len(missing)} non-zero jobs, first entries:\n  {preview}\n"
+            "Rerun scripts/run_inference_followups.py --phase calibration after "
+            "pulling the fixed config. The trained checkpoint does NOT need to be rebuilt."
+        )
+
     has_anchor = bool(
         ((existing["method"] == "additive") & (existing["strength"] == 0.0)).any()
     )
     if not has_anchor:
-        phase_cfg = dict(cfg["followup"]["calibration"])
-        phase_cfg["strengths"] = [0.0]
+        anchor_cfg = dict(phase_cfg)
+        anchor_cfg["strengths"] = [0.0]
         # Keep the same calibration seed/prompts/sampling settings, but generate
         # only one additive alpha=0 batch rather than repeating the full beta sweep.
         anchor_path = out_dir / "calibration_anchor_only.csv"
@@ -54,7 +84,7 @@ def main() -> None:
         anchor = run_scaled_evaluation(
             cfg,
             specs=[ScaledRepairSpec("additive", None, 0.0, 1.0)],
-            phase_cfg=phase_cfg,
+            phase_cfg=anchor_cfg,
             output_csv=anchor_path,
         )
         existing = pd.concat([existing, anchor], ignore_index=True)
