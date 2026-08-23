@@ -5,10 +5,7 @@ __pycache__/
 venv/
 .env
 .ipynb_checkpoints/
-results/*.csv
-results/*.png
-results/*.json
-results/*.pt
+results/
 checkpoints/
 wandb/
 .DS_Store
