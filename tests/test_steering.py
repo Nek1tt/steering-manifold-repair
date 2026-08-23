@@ -23,6 +23,18 @@ def test_sae_alpha_matches_normalized_coordinate_scale():
     assert torch.allclose(delta.norm(dim=-1), expected, rtol=1e-5, atol=1e-5)
 
 
+def test_vector_alpha_preserves_raw_direction_magnitude():
+    resid = torch.randn(2, 3, 4)
+    raw_vector = torch.tensor([1.0, -2.0, 0.5, 3.0])
+    alpha = 1.75
+    hook = SteeringHook(raw_vector, strength=alpha, strength_mode="vector_alpha")
+    out = hook(resid)
+    expected = alpha * raw_vector
+    delta = out[:, -1] - resid[:, -1]
+    assert torch.allclose(delta, expected.unsqueeze(0).expand_as(delta), rtol=1e-5, atol=1e-5)
+    assert torch.allclose(out[:, :-1], resid[:, :-1])
+
+
 def test_norm_preserving_repair_restores_norm():
     resid = torch.randn(2, 3, 8)
     hook = SteeringHook(
