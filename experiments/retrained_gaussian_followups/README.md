@@ -41,6 +41,8 @@ Calibration objective выбрал:
 
 У DPAR `beta=.25` лишь немного лучше `.50` на calibration (`69.56` vs `67.85`), поэтому exact optimum нельзя считать устойчивым.
 
+Held-out method set был зафиксирован **до** просмотра evaluation: кроме additive и calibration-selected variants в него по протоколу всегда входили full Gaussian `beta=1` и full DPAR `beta=1` как обязательные full-repair controls. Поэтому результат full DPAR на `beta=1` ниже не является post-hoc выбором `beta` по held-out; этот control оценивался независимо от того, какой масштаб выигрывал calibration.
+
 ## Dense held-out frontier
 
 | метод | F@C80 | F@C85 | F@C90 | F@C95 |
@@ -96,7 +98,7 @@ Seed-wise deltas не обязаны усредняться в aggregate `+4.99`
 
 ## Финальный practical вывод
 
-> Vanilla denoising имеет реальный steering-cancellation failure mode, который DPAR устраняет точно. Dense held-out evaluation подтверждает локальные Pareto gains, включая `+4.99` fluency points на C90 для full DPAR, но ни один calibration-selected `beta` не доминирует additive во всех concept regions.
+> Vanilla denoising имеет реальный steering-cancellation failure mode, который DPAR устраняет точно. Dense held-out evaluation подтверждает локальные Pareto gains, включая `+4.99` fluency points на C90 для заранее включённого full-DPAR control, но ни один calibration-selected `beta` не доминирует additive во всех concept regions.
 
 Сохранённые evidence-файлы:
 
