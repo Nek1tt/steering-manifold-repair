@@ -165,7 +165,23 @@ KL-SELECTIVE JRR PREFLIGHT: PASS
 
 Они проверяют hook semantics, directional JVP и локальную KL-gradient geometry независимо от сохранённых итоговых CSV.
 
-## 6. Полное воспроизведение результатов
+## 6. Фактический clean-room результат перед сдачей
+
+Отдельный clone на Windows был пройден как внешний проверяющий, без использования старых `results/` и `checkpoints/` автора. Получено:
+
+```text
+pytest                             38 passed
+REPAIR SUITE PREFLIGHT             PASS
+SENTIMENT VECTOR VALIDATION        PASS
+JRR PREFLIGHT                      PASS
+KL-SELECTIVE JRR PREFLIGHT         PASS
+fresh Gaussian retrain             completed
+REPRODUCIBILITY CHECK              PASS
+```
+
+Таким образом, проверены разные уровни воспроизводимости: импортируемость и unit-level invariants, реальные Hugging Face model/data downloads, Transformer hook semantics, построение steering direction из исходных текстовых данных, JVP/KL geometry и повторное обучение основного learned checkpoint.
+
+## 7. Полное воспроизведение результатов
 
 Полные эксперименты существенно дороже smoke test. Для каждого этапа сохранён отдельный notebook:
 
@@ -181,7 +197,7 @@ notebooks/selective_jrr_experiment_colab.ipynb
 
 Важно: для JRR/KL-JRR calibration/held-out протоколы нельзя менять после просмотра результатов. В частности, Experiment 008 не прошёл заранее заданный calibration gate, поэтому его новый held-out намеренно не запускался.
 
-## 7. Проверка опубликованного checkpoint
+## 8. Проверка опубликованного checkpoint
 
 Публичный checkpoint:
 
@@ -208,4 +224,4 @@ Checkpoint на Hugging Face является тем же типом Gaussian ac
 3. `validate_sentiment_baseline.py` заканчивается `PASS`, а полный baseline строит expected trade-off;
 4. fresh Gaussian retrain проходит `scripts/check_reproducibility.py`.
 
-Это проверяет установку, данные, model hooks, обучение, формат checkpoint и основной экспериментальный pipeline независимо от старого рабочего окружения.
+Контрольный clean-room запуск выше выполнил эти критерии, а также дополнительные JRR/KL-JRR preflight-проверки. Это проверяет установку, данные, model hooks, обучение, формат checkpoint и основной экспериментальный pipeline независимо от старого рабочего окружения.
