@@ -13,6 +13,9 @@ class ResidualActivationDenoiser(nn.Module):
 
     The model predicts a repair residual and returns ``z + residual``. The last
     projection is zero-initialized so the network starts as the identity map.
+    The predicted residual is rescaled by the per-sample RMS of ``z`` so the
+    network can generalize across natural activation-scale variation even though
+    its content pathway is layer-normalized.
     """
 
     def __init__(self, d_model: int = 768, hidden_dim: int = 1536) -> None:
@@ -44,7 +47,8 @@ class ResidualActivationDenoiser(nn.Module):
             raise ValueError("noise_ratio batch dimension must match z")
         cond = torch.log1p(noise_ratio.clamp_min(0.0))
         x = self.in_norm(z) + self.noise_embed(cond.to(dtype=z.dtype, device=z.device))
-        return z + self.net(x)
+        rms = z.square().mean(dim=-1, keepdim=True).sqrt().clamp_min(1e-6)
+        return z + rms * self.net(x)
 
 
 @dataclass(frozen=True)
