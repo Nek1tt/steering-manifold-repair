@@ -34,10 +34,13 @@ $$
 \Delta=D(z)-z.
 $$
 
-DPAR удаляет из неё компоненту вдоль steering direction:
+DPAR удаляет из неё компоненту вдоль steering direction. В явном виде:
 
 $$
-\Delta_\perp=\Delta-\operatorname{proj}_v(\Delta),
+\Delta_\perp
+=
+\Delta-
+\frac{\langle \Delta,v\rangle}{\langle v,v\rangle}v,
 $$
 
 $$
