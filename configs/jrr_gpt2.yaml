@@ -50,14 +50,22 @@ jrr:
     methods: [additive, jrr_orth]
     concept_thresholds: [80, 85, 90]
     gate_min_fluency_gain: 2.0
+
+    # Calibration deliberately mirrors the Stage-A behavior probe. The first
+    # oracle calibration used only 6 prompts, 24 generated tokens and a coarse
+    # alpha grid; under that sampling regime even the additive control never
+    # reached the frozen C80/C85/C90 thresholds, so the gate returned all-NaN
+    # frontiers and could not test JRR. This alignment is a protocol correction,
+    # not method tuning: target layer, beta, methods and thresholds stay frozen.
     calibration:
       prompts_path: data/calibration_prompts.txt
-      max_prompts: 6
-      strengths: [0.0, 1.0, 1.5, 2.0, 2.5, 3.0]
+      max_prompts: 8
+      strengths: [0.0, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0, 2.25, 2.5, 3.0, 4.0]
       seeds: [37]
-      max_new_tokens: 24
+      max_new_tokens: 32
       temperature: 0.9
       top_p: 0.95
+
     evaluation:
       prompts_path: data/prompts.txt
       max_prompts: 20
