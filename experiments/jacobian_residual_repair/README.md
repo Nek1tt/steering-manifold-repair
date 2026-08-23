@@ -25,11 +25,7 @@ $$
 Разлагаем остаток через явную проекцию на `t`:
 
 $$
-R_\parallel
-=
-\frac{\langle R_\alpha,t\rangle}{\langle t,t\rangle}t,
-\qquad
-R_\perp=R_\alpha-R_\parallel.
+R_\parallel = \frac{\langle R_\alpha,t\rangle}{\langle t,t\rangle}t,\qquad R_\perp=R_\alpha-R_\parallel.
 $$
 
 Oracle JRR применяет
