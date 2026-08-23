@@ -4,9 +4,9 @@
 
 Activation steering меняет скрытое состояние языковой модели по правилу
 
-\[
+$$
 \tilde h = h + \alpha v,
-\]
+$$
 
 где `v` кодирует желаемое свойство, а `alpha` задаёт силу вмешательства. При достаточно больших `alpha` нужное свойство усиливается, но генерация деградирует: растёт perplexity/NLL, текст теряет связность и появляется вырождение.
 
@@ -26,9 +26,9 @@ Activation steering меняет скрытое состояние языков�
 
 После неудачной попытки с SAE-фичей используется contrastive sentiment/persona-style direction:
 
-\[
+$$
 v = \mathbb{E}[h\mid\text{positive}] - \mathbb{E}[h\mid\text{negative}].
-\]
+$$
 
 Вектор строится из отдельных positive/negative примеров. Denoiser никогда не обучается на этом validation-векторе и не знает о его существовании.
 
@@ -82,11 +82,11 @@ Contrastive midpoint direction проходит fail-fast validation и восп
 
 На 80 000 generic WikiText-2 активаций layer 6 обучается residual MLP:
 
-\[
+$$
 D_\theta(h+\delta, r) \approx h,
 \qquad
 r = \|\delta\|/\|h\|.
-\]
+$$
 
 Архитектура обусловлена относительной силой шума `r`; residual output инициализируется близко к identity map. Validation relative MSE improvement после пяти эпох достигает примерно **67.8%**, поэтому downstream-проблемы нельзя объяснить тем, что denoiser просто не научился reconstruction-задаче.
 
@@ -98,27 +98,27 @@ r = \|\delta\|/\|h\|.
 
 Пусть
 
-\[
+$$
 z = h + \alpha v,
 \qquad
 \Delta = D(z)-z.
-\]
+$$
 
 Denoiser может улучшить fluency самым тривиальным способом — направить `Delta` против `v` и частично отменить steering. Тогда apparent repair не является repair при сопоставимой силе концепта.
 
 DPAR разлагает поправку:
 
-\[
+$$
 \Delta_\parallel = \operatorname{proj}_v(\Delta),
 \qquad
 \Delta_\perp = \Delta - \Delta_\parallel,
-\]
+$$
 
 и применяет только
 
-\[
+$$
 h_{\text{DPAR}} = z + \Delta_\perp.
-\]
+$$
 
 По построению компонент вдоль steering axis сохраняется.
 
@@ -161,9 +161,9 @@ h_{\text{DPAR}} = z + \Delta_\perp.
 
 Чтобы отделить геометрию от величины correction, введён независимый масштаб `beta`:
 
-\[
+$$
 h_{out}=z+\beta\,\Delta_{filtered}.
-\]
+$$
 
 Gaussian denoiser был заново обучен в fresh runtime. История обучения совпала с исходной **точно на каждой эпохе**, а финальное validation improvement снова составило **67.8%** (`val_denoised_mse = 2.822651`). Это сильная проверка воспроизводимости training pipeline.
 
@@ -181,9 +181,9 @@ Interpolated held-out frontier:
 
 Главный practical результат:
 
-\[
+$$
 F@C90:\quad 71.45\;\text{(DPAR)}\;\;\text{vs}\;\;66.46\;\text{(additive)},
-\]
+$$
 
 то есть **+4.99 fluency points**.
 
@@ -199,23 +199,23 @@ DPAR исправляет геометрию repair на source layer, но не
 
 Для clean state `h`:
 
-\[
+$$
 y_0 = F(h),
 \qquad
 y_\alpha = F(h+\alpha v),
-\]
+$$
 
 а first-order transported steering равен
 
-\[
+$$
 t = J_F(h)v.
-\]
+$$
 
 Определим точный nonlinear Taylor remainder:
 
-\[
+$$
 R_\alpha = y_\alpha-y_0-\alpha t.
-\]
+$$
 
 ### 7.1. Диагностический результат
 
@@ -247,9 +247,9 @@ Slope практически совпадает с second-order prediction `O(al
 
 JRR удаляет компоненту остатка, ортогональную transported direction:
 
-\[
+$$
 y_{repair}=y_\alpha-R_\perp.
-\]
+$$
 
 Calibration дала `F@C80=100.00` против `45.49` у additive и открыла frozen held-out. Этот calibration gain **не переносится в отчёт как held-out effect size**.
 
@@ -292,15 +292,15 @@ JRR прямо мотивирует следующую гипотезу: не у
 
 В точке `y_alpha` вычисляется
 
-\[
+$$
 g = \nabla_y KL(p_{clean}\|p_y),
-\]
+$$
 
 затем gradient защищается от изменения first-order steering:
 
-\[
+$$
 g_\perp=g-\operatorname{proj}_{Jv}(g),
-\]
+$$
 
 и удаляется только положительная projection `R_orth` на `g_perp`.
 
