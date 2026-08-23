@@ -8,101 +8,104 @@ tags:
 - gpt2
 ---
 
-# GPT-2 Gaussian Activation Denoiser for Direction-Preserving Activation Repair
+# Gaussian activation denoiser для GPT-2 и DPAR
 
-This repository contains the final Gaussian activation-denoiser checkpoint from the `steering-manifold-repair` project.
+Этот checkpoint — лучший обученный practical component проекта `steering-manifold-repair`.
 
-The model is a residual MLP trained on generic GPT-2 Small activations from:
+Модель представляет собой residual MLP, обученный на generic активациях GPT-2 Small из
 
 ```text
 blocks.6.hook_resid_post
 ```
 
-It reconstructs clean residual-stream activations from Gaussian-corrupted activations and is intended to be used with **Direction-Preserving Activation Repair (DPAR)** at inference time.
+для восстановления clean residual-stream activations после Gaussian corruption. На inference checkpoint используется вместе с **Direction-Preserving Activation Repair (DPAR)**.
 
-## DPAR inference geometry
+## DPAR
 
-For steered state
+Для steered state
 
-```text
-z = h + alpha * v
-```
+\[
+z=h+\alpha v
+\]
 
-let the denoiser propose
+denoiser предлагает correction
 
-```text
-raw = D(z) - z
-```
+\[
+\Delta=D(z)-z.
+\]
 
-DPAR removes the component of that correction parallel to the steering direction:
+DPAR удаляет из неё компоненту вдоль steering direction:
 
-```text
-correction = raw - proj_v(raw)
-output = z + correction
-```
+\[
+\Delta_\perp=\Delta-\operatorname{proj}_v(\Delta),
+\]
 
-This preserves the requested steering component by construction while allowing an orthogonal denoising correction.
+\[
+h_{out}=z+\Delta_\perp.
+\]
 
-The DPAR projection is an inference-time operation and is **not encoded directly in the checkpoint weights**.
+Таким образом, requested steering component сохраняется по построению, а denoiser может корректировать ортогональные направления.
 
-## Training
+Важно: DPAR — **inference-time geometry** и не зашит непосредственно в weights checkpoint.
 
-- base model: GPT-2 Small
-- residual hook: `blocks.6.hook_resid_post`
-- training corpus: WikiText-2 train stream
-- cached activations: 80,000 total (72k train / 8k validation)
-- d_model: 768
-- hidden dimension: 1536
-- corruption: isotropic Gaussian activation noise over a range of noise/severity ratios
-- optimizer/training config: included as `training_config.yaml`
-- exact training history: included as `training_history.json`
+## Обучение
 
-A fresh retrain reproduced the archived training history exactly under the frozen seeds/configuration. Final held-out relative activation-MSE improvement was approximately **67.8%**.
+- base model: GPT-2 Small;
+- hook: `blocks.6.hook_resid_post`;
+- corpus: WikiText-2 train stream;
+- 80 000 cached activations: 72k train / 8k validation;
+- `d_model=768`;
+- hidden dimension `1536`;
+- corruption: isotropic Gaussian activation noise с диапазоном relative severity;
+- optimizer/config: `training_config.yaml`;
+- exact history: `training_history.json`.
 
-## Evaluation summary
+Fresh retrain точно воспроизвёл archived training history при frozen seeds/config. Финальное held-out relative activation-MSE improvement — примерно **67.8%**.
 
-The main mechanistic finding is that a vanilla denoiser correction increasingly points against the steering direction as steering strength grows. DPAR removes this steering-cancellation failure exactly and preserves effective alpha to numerical precision.
+## Evaluation
 
-Downstream concept/fluency improvements are local rather than universal. In the dense held-out follow-up, full DPAR (`beta=1`) achieved:
+Главный mechanistic result: vanilla denoiser correction по мере усиления steering всё сильнее направляется против steering direction. DPAR устраняет это cancellation и сохраняет effective `alpha` до численной точности.
+
+Downstream improvement локальный, а не universal. В dense held-out follow-up full DPAR (`beta=1`) дал:
 
 ```text
 F@C90 = 71.45
 ```
 
-versus additive steering:
+против additive steering:
 
 ```text
 F@C90 = 66.46
 ```
 
-for a descriptive gain of about `+4.99` fluency points. The sentiment score is noisy/non-monotonic, so this should not be interpreted as universal Pareto domination.
+то есть descriptive gain **+4.99 fluency points**. Sentiment score шумный и немонотонный, поэтому этот результат не заявляется как universal Pareto domination.
 
-## Related mechanistic results
+## Связанные mechanistic experiments
 
-The GitHub repository also contains two later non-checkpoint oracle investigations:
+В GitHub также находятся два более поздних causal/oracle исследования без отдельных learned weights:
 
-- Jacobian Residual Repair (JRR): strong steering creates an approximately quadratic downstream nonlinear Taylor remainder whose magnitude becomes comparable to the first-order steering effect.
-- KL-Selective JRR: a compact local KL-sensitive mode explains a large fraction of local next-token divergence, but does not robustly preserve long-horizon concept in the preregistered strong-steering calibration.
+- **JRR (Jacobian Residual Repair):** strong steering создаёт примерно квадратичный downstream nonlinear Taylor remainder, сопоставимый в сильном режиме с first-order steering effect.
+- **KL-Selective JRR:** небольшая local KL-sensitive component объясняет большую долю next-token divergence, но не гарантирует long-horizon concept preservation.
 
-These experiments are included for mechanistic analysis; the checkpoint in this repository remains the best validated practical learned component.
+Checkpoint в этом Hugging Face repo остаётся наиболее валидированным practical learned component.
 
-## Code and reproduction
+## Код и воспроизведение
 
-Full code, experiment reports, unit tests, notebooks, and archived compact results are available in the GitHub repository:
+GitHub:
 
 ```text
 https://github.com/Nek1tt/steering-manifold-repair
 ```
 
-Primary reproduction notebook:
+Основной notebook для fresh retrain и dense DPAR follow-up:
 
 ```text
 notebooks/retrain_gaussian_followups_fresh_colab.ipynb
 ```
 
-## Limitations
+## Ограничения
 
-- Results are on GPT-2 Small and a sentiment/persona steering direction.
-- Concept evaluation is noisy and non-monotonic with steering strength.
-- DPAR has a strong mechanistic guarantee (preserving the requested steering-axis component), but downstream text gains are threshold-dependent rather than universal.
-- The checkpoint is not evidence that Gaussian denoising is optimal for every steering direction or model family.
+- Evaluation проведён на GPT-2 Small и sentiment/persona-style steering direction.
+- Concept judge шумный и немонотонный по steering strength.
+- DPAR имеет точную геометрическую гарантию только для projection вдоль steering axis; downstream text gains остаются threshold-dependent.
+- Checkpoint не доказывает оптимальность Gaussian denoising для других models/concepts.
