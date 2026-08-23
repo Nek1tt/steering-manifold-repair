@@ -32,10 +32,7 @@ selective_jrr:
   beta: 1.0
   positive_only: true
 
-  # Lower thresholds are included because the manual oracle generation regime
-  # on the previous held-out did not reliably reach C80. These are descriptive;
-  # the primary calibration gate below is same-alpha and does not depend on
-  # interpolation thresholds.
+  # Descriptive only. The primary decision criterion is the same-alpha gate.
   concept_thresholds: [70, 75, 80]
 
   calibration:
@@ -55,14 +52,15 @@ selective_jrr:
     gate_min_fluency_gain: 5.0
     gate_max_concept_loss: 5.0
 
-  # This is a NEW hold-out split created only after Experiment 007 was analyzed.
-  # The original 20-prompt held-out is no longer confirmatory for a method whose
-  # design was motivated by its results.
+  # NEW hold-out created only after Experiment 007 was analyzed. We evaluate
+  # exactly the strong-steering regime that motivated selective repair, and keep
+  # full JRR as a direct causal control. This is both cheaper and more decisive
+  # than another broad alpha sweep.
   evaluation:
     prompts_path: data/selective_jrr_heldout_prompts.txt
     max_prompts: 12
-    methods: [additive, kl_jrr]
-    strengths: [0.0, 1.0, 1.5, 2.0, 2.25, 3.0, 4.0]
+    methods: [additive, jrr_orth, kl_jrr]
+    strengths: [0.0, 2.25, 3.0, 4.0]
     seeds: [101, 211]
     max_new_tokens: 32
     temperature: 0.9
