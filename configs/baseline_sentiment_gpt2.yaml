@@ -1,0 +1,37 @@
+model:
+  name: gpt2
+  device: auto
+  dtype: float32
+
+vector:
+  type: contrastive_mean_difference
+  layer: 6
+  hook_name: blocks.6.hook_resid_post
+  positive_path: data/sentiment_positive.txt
+  negative_path: data/sentiment_negative.txt
+  pool_last_n: 4
+  cache_path: results/sentiment_direction.pt
+
+steering:
+  strength_mode: vector_alpha
+  strengths: [0.0, 0.25, 0.50, 0.75, 1.0, 1.5, 2.0, 3.0, 4.0, 5.0]
+  repair: identity
+
+sampling:
+  max_new_tokens: 64
+  temperature: 0.9
+  top_p: 0.95
+  seeds: [11, 23]
+
+judge:
+  model_name: distilbert-base-uncased-finetuned-sst-2-english
+  batch_size: 32
+
+experiment:
+  prompts_path: data/prompts.txt
+  calibration_prompts_path: data/calibration_prompts.txt
+  output_csv: results/sentiment_baseline_samples.csv
+  output_plot: results/sentiment_baseline_pareto.png
+  save_every: 1
+  min_concept_gain: 8.0
+  min_fluency_drop: 5.0
