@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "steering-manifold-repair"
 version = "0.1.0"
-description = "Baseline and research scaffold for activation steering repair"
+description = "Исследование и методы восстановления качества при activation steering"
 readme = "README.md"
 requires-python = ">=3.10"
 
