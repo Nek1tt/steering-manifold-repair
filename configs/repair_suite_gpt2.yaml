@@ -1,0 +1,72 @@
+model:
+  name: gpt2
+  device: auto
+  dtype: float32
+
+vector:
+  layer: 6
+  hook_name: blocks.6.hook_resid_post
+  cache_path: results/sentiment_direction.pt
+
+activation_cache:
+  path: results/layer6_generic_activations.pt
+  dataset_name: wikitext
+  dataset_config: wikitext-2-raw-v1
+  split: train
+  text_field: text
+  max_texts: 3000
+  batch_size: 16
+  max_seq_tokens: 128
+  max_activations: 80000
+  min_chars: 40
+  token_stride: 1
+  val_fraction: 0.10
+  seed: 1234
+
+training:
+  device: auto
+  hidden_dim: 1536
+  batch_size: 512
+  epochs: 5
+  lr: 0.0003
+  weight_decay: 0.0001
+  grad_clip: 1.0
+  ratio_min: 0.02
+  ratio_max: 3.0
+  structured_probability: 0.5
+  identity_probability: 0.05
+  seed: 2026
+  num_workers: 0
+
+denoisers:
+  gaussian:
+    checkpoint: checkpoints/denoiser_gaussian.pt
+    history: results/denoiser_gaussian_history.json
+    required: true
+  mixed:
+    checkpoint: checkpoints/denoiser_mixed.pt
+    history: results/denoiser_mixed_history.json
+    required: true
+
+judge:
+  model_name: distilbert-base-uncased-finetuned-sst-2-english
+  batch_size: 32
+
+evaluation:
+  prompts_path: data/prompts.txt
+  strengths: [0.0, 0.5, 0.75, 1.0, 1.5, 2.0, 3.0, 4.0]
+  seeds: [11, 23]
+  max_new_tokens: 64
+  temperature: 0.9
+  top_p: 0.95
+  methods:
+    - additive
+    - norm_preserving
+    - gaussian
+    - gaussian_lambda05
+    - gaussian_dpar
+    - mixed
+    - mixed_dpar
+  output_csv: results/repair_suite_samples.csv
+  output_dir: results/repair_suite
+  save_every: 1
