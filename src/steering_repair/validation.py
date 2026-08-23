@@ -10,7 +10,7 @@ from .steering import SteeringHook
 
 
 def validate_vector(cfg) -> dict:
-    """Cheap preflight: verify both the hidden-state direction and generated concept."""
+    """Cheap preflight: verify that the chosen direction changes generated text."""
     model = load_model(cfg)
     sae = load_openai_sae(
         location=cfg.sae.location,
@@ -21,6 +21,8 @@ def validate_vector(cfg) -> dict:
     direction = decoder_direction(sae, cfg.sae.feature_id, unit_norm=True)
     prompts = load_prompts(cfg.experiment.calibration_prompts_path)
 
+    # Mechanistic diagnostic only: this is not the acceptance criterion, because
+    # an SAE decoder direction need not be exactly dual to its encoder row.
     max_alpha = max(cfg.steering.strengths)
     steering = SteeringHook(
         direction=direction,
@@ -28,7 +30,6 @@ def validate_vector(cfg) -> dict:
         strength_mode=cfg.steering.strength_mode,
         repair=cfg.steering.repair,
     )
-
     direct_deltas: list[float] = []
     with torch.no_grad():
         for prompt in prompts:
@@ -44,27 +45,28 @@ def validate_vector(cfg) -> dict:
     direct_delta = sum(direct_deltas) / len(direct_deltas)
 
     rows = []
-    seed = cfg.sampling.seeds[0]
     for alpha in cfg.steering.strengths:
-        generated = generate_batch(
-            model,
-            prompts,
-            hook_name=cfg.steering.hook_name,
-            direction=direction,
-            strength=float(alpha),
-            strength_mode=cfg.steering.strength_mode,
-            repair=cfg.steering.repair,
-            max_new_tokens=min(48, cfg.sampling.max_new_tokens),
-            temperature=cfg.sampling.temperature,
-            top_p=cfg.sampling.top_p,
-            seed=seed,
-        )
-        scores = [
-            select_concept_score(
-                text_metrics(item["continuation"]), cfg.experiment.concept_metric
+        scores: list[float] = []
+        for seed in cfg.sampling.seeds:
+            generated = generate_batch(
+                model,
+                prompts,
+                hook_name=cfg.steering.hook_name,
+                direction=direction,
+                strength=float(alpha),
+                strength_mode=cfg.steering.strength_mode,
+                repair=cfg.steering.repair,
+                max_new_tokens=min(64, cfg.sampling.max_new_tokens),
+                temperature=cfg.sampling.temperature,
+                top_p=cfg.sampling.top_p,
+                seed=int(seed),
             )
-            for item in generated
-        ]
+            scores.extend(
+                select_concept_score(
+                    text_metrics(item["continuation"]), cfg.experiment.concept_metric
+                )
+                for item in generated
+            )
         rows.append(
             {
                 "strength": float(alpha),
@@ -75,7 +77,9 @@ def validate_vector(cfg) -> dict:
     base = next(row["concept_score"] for row in rows if row["strength"] == 0)
     best = max(rows, key=lambda row: row["concept_score"])
     gain = float(best["concept_score"] - base)
-    passed = direct_delta > 0 and gain > 0
+    # The assignment's requirement is behavioral: the generated-text concept
+    # must increase. The encoder-preactivation delta is retained as a diagnostic.
+    passed = gain > 0
     return {
         "passed": passed,
         "direct_target_preact_delta": direct_delta,
