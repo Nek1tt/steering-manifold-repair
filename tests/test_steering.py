@@ -14,6 +14,15 @@ def test_norm_ratio_changes_only_last_position():
     assert torch.allclose(delta.norm(dim=-1), expected, rtol=1e-5, atol=1e-5)
 
 
+def test_sae_alpha_matches_normalized_coordinate_scale():
+    resid = torch.randn(3, 2, 8)
+    hook = SteeringHook(torch.randn(8), strength=7.0, strength_mode="sae_alpha")
+    out = hook(resid)
+    delta = out[:, -1] - resid[:, -1]
+    expected = 7.0 * resid[:, -1].std(dim=-1)
+    assert torch.allclose(delta.norm(dim=-1), expected, rtol=1e-5, atol=1e-5)
+
+
 def test_norm_preserving_repair_restores_norm():
     resid = torch.randn(2, 3, 8)
     hook = SteeringHook(
