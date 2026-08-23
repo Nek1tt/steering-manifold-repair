@@ -74,6 +74,8 @@ Contrastive midpoint direction проходит fail-fast validation и восп
 
 То есть при росте steering нужное свойство сначала усиливается почти без потери fluency, а затем связность быстро разрушается.
 
+![Pareto baseline](../experiments/successful_sentiment_baseline/sentiment_baseline_pareto.png)
+
 Подробности: [`experiments/successful_sentiment_baseline/`](../experiments/successful_sentiment_baseline/).
 
 ## 4. Gaussian denoiser: baseline из задания
@@ -135,6 +137,10 @@ h_{\text{DPAR}} = z + \Delta_\perp.
 У DPAR effective `alpha` совпадает с requested `alpha` до численной погрешности; средняя ошибка порядка **5.2e-8**. При этом поправка не исчезает: например, при `alpha=2` её ортогональная норма составляет около 41% нормы steering perturbation.
 
 Это прямое подтверждение steering-cancellation failure mode.
+
+![Effective alpha](../experiments/repair_suite/effective_alpha.png)
+
+![Геометрия correction](../experiments/repair_suite/correction_geometry.png)
 
 ### 5.3. Structured corruption
 
@@ -344,7 +350,30 @@ go_to_new_heldout = false
 
 Таким образом, работа не ограничивается сравнением final scores: каждый новый эксперимент появляется из конкретного failure mode предыдущего и либо подтверждает, либо опровергает механизм.
 
-## 10. Ограничения
+## 10. Соответствие критериям задания
+
+### Идеи шире предложенного denoiser baseline
+
+В задании прямо предлагается попробовать простой denoiser и подумать о более хитрых способах repair. Здесь Gaussian reconstruction — только отправная точка. DPAR появляется из измеренной steering-cancellation geometry, JRR — из отдельной гипотезы о downstream Taylor nonlinearity, а KL-JRR — из causal failure mode полного JRR.
+
+### Есть ли метод, работающий лучше additive steering
+
+Да, но утверждение намеренно локальное: dense held-out показывает **+4.99 fluency points на C90** для full DPAR относительно additive. В других concept regions DPAR не доминирует, и это прямо отражено в отчёте.
+
+### Анализ «почему и как»
+
+Основные claims опираются не только на final generation score:
+
+- effective `alpha` и cosine correction диагностируют cancellation;
+- reconstruction cross-evaluation отделяет качество denoiser от downstream behavior;
+- JVP/Taylor decomposition измеряет размер nonlinear response;
+- exact causal JRR удаляет выбранный компонент состояния;
+- seed-wise analysis и paired bootstrap проверяют устойчивость;
+- KL-JRR причинно тестирует более узкую harmful-mode hypothesis и сохраняет failed gate без post-hoc relaxation.
+
+Это и есть основная исследовательская часть работы.
+
+## 11. Ограничения
 
 - Проверена только GPT-2 Small.
 - Основной валидированный concept — positive sentiment; generalization на другие steering directions не доказана.
@@ -353,7 +382,7 @@ go_to_new_heldout = false
 - DPAR гарантирует сохранение projection вдоль `v`, но не гарантирует сохранение всей нелинейной семантики модели.
 - Bootstrap для JRR был сделан post-hoc и используется только как описательная устойчивость NLL-сигнала.
 
-## 11. Воспроизводимость
+## 12. Воспроизводимость
 
 В репозитории сохранены:
 
@@ -380,7 +409,7 @@ notebooks/selective_jrr_experiment_colab.ipynb
 
 Это Gaussian activation denoiser; DPAR применяется к его correction на inference-time.
 
-## 12. Итог
+## 13. Итог
 
 Самая сильная формулировка результата:
 
