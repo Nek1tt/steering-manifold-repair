@@ -26,9 +26,9 @@ Validation steering-вектор никогда не используется п
 
 Для
 
-\[
+$$
 z=h+\alpha v,\qquad \Delta=D(z)-z
-\]
+$$
 
 vanilla Gaussian correction всё сильнее направляется против `v` по мере роста `alpha`.
 
@@ -48,11 +48,11 @@ vanilla Gaussian correction всё сильнее направляется пр�
 
 DPAR использует
 
-\[
+$$
 \Delta_\perp=\Delta-\operatorname{proj}_v(\Delta),
 \qquad
 h_{out}=z+\Delta_\perp,
-\]
+$$
 
 и тем самым устраняет steering-cancellation confound по построению. Поправка при этом остаётся существенной: DPAR не превращается в identity.
 
