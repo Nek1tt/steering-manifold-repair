@@ -24,25 +24,25 @@ blocks.6.hook_resid_post
 
 Для steered state
 
-\[
+$$
 z=h+\alpha v
-\]
+$$
 
 denoiser предлагает correction
 
-\[
+$$
 \Delta=D(z)-z.
-\]
+$$
 
 DPAR удаляет из неё компоненту вдоль steering direction:
 
-\[
+$$
 \Delta_\perp=\Delta-\operatorname{proj}_v(\Delta),
-\]
+$$
 
-\[
+$$
 h_{out}=z+\Delta_\perp.
-\]
+$$
 
 Таким образом, requested steering component сохраняется по построению, а denoiser может корректировать ортогональные направления.
 
