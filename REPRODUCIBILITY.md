@@ -49,12 +49,25 @@ REPAIR SUITE PREFLIGHT: PASS
 
 Baseline полностью строит sentiment direction из файлов `data/sentiment_positive.txt` и `data/sentiment_negative.txt`; готовый steering-вектор не требуется.
 
+Сначала fail-fast validation строит и сохраняет calibrated direction:
+
 ```powershell
-.\.venv\Scripts\python.exe scripts\run_sentiment_baseline.py --config configs\baseline_sentiment_gpt2.yaml
 .\.venv\Scripts\python.exe scripts\validate_sentiment_baseline.py --config configs\baseline_sentiment_gpt2.yaml
 ```
 
-После этого должен появиться:
+Ожидаемая финальная строка:
+
+```text
+SENTIMENT VECTOR VALIDATION: PASS
+```
+
+После этого запускается полный baseline sweep:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\run_sentiment_baseline.py --config configs\baseline_sentiment_gpt2.yaml
+```
+
+После этих шагов должны появиться:
 
 ```text
 results/sentiment_direction.pt
@@ -172,7 +185,7 @@ Checkpoint на Hugging Face является тем же типом Gaussian ac
 
 1. `pytest -q` проходит;
 2. `preflight_repair_suite.py` заканчивается `PASS`;
-3. sentiment baseline строит steering direction из исходных текстовых данных;
+3. `validate_sentiment_baseline.py` заканчивается `PASS`, а полный baseline строит expected trade-off;
 4. fresh Gaussian retrain проходит `scripts/check_reproducibility.py`.
 
 Это проверяет установку, данные, model hooks, обучение, формат checkpoint и основной экспериментальный pipeline независимо от старого рабочего окружения.
