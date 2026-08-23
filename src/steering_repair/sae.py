@@ -17,13 +17,6 @@ _ALLOWED_LOCATIONS = {
 
 
 def _openai_v5_path(location: str, layer: int, width: SAEWidth) -> str:
-    """Return the public Azure blob path for an OpenAI GPT-2 Small v5 SAE.
-
-    We intentionally reproduce the tiny path helper locally instead of installing
-    ``openai/sparse_autoencoder`` as a package. That upstream repository pins
-    torch==2.1.0, transformer_lens==1.9.1 and blobfile==2.0.2, which conflicts
-    with modern Colab / TransformerLens environments.
-    """
     if location not in _ALLOWED_LOCATIONS:
         raise ValueError(f"Unsupported OpenAI SAE location: {location!r}")
     if not 0 <= layer < 12:
@@ -50,33 +43,23 @@ class _TopK(nn.Module):
 
 
 class OpenAIGPT2SAE(nn.Module):
-    """Minimal, inference-only reader for OpenAI's released GPT-2 SAEs.
-
-    This mirrors the encode/decode behavior of ``openai/sparse_autoencoder``
-    closely enough for feature scoring and decoder-direction steering, without
-    inheriting that repository's historical dependency pins.
-    """
+    """Inference-compatible reader for OpenAI's released GPT-2 v5 SAEs."""
 
     def __init__(self, state_dict: dict) -> None:
         super().__init__()
-        encoder_weight = state_dict["encoder.weight"]
-        decoder_weight = state_dict["decoder.weight"]
-        pre_bias = state_dict["pre_bias"]
-        latent_bias = state_dict["latent_bias"]
-
         self.encoder = nn.Module()
         self.encoder.register_parameter(
-            "weight", nn.Parameter(encoder_weight, requires_grad=False)
+            "weight", nn.Parameter(state_dict["encoder.weight"], requires_grad=False)
         )
         self.decoder = nn.Module()
         self.decoder.register_parameter(
-            "weight", nn.Parameter(decoder_weight, requires_grad=False)
+            "weight", nn.Parameter(state_dict["decoder.weight"], requires_grad=False)
         )
         self.register_parameter(
-            "pre_bias", nn.Parameter(pre_bias, requires_grad=False)
+            "pre_bias", nn.Parameter(state_dict["pre_bias"], requires_grad=False)
         )
         self.register_parameter(
-            "latent_bias", nn.Parameter(latent_bias, requires_grad=False)
+            "latent_bias", nn.Parameter(state_dict["latent_bias"], requires_grad=False)
         )
 
         activation_name = state_dict.get("activation", "ReLU")
@@ -99,11 +82,11 @@ class OpenAIGPT2SAE(nn.Module):
 
     @staticmethod
     def _layer_norm(x: torch.Tensor, eps: float = 1e-5):
+        # Matches openai/sparse_autoencoder/model.py (torch.std default is unbiased=True).
         mu = x.mean(dim=-1, keepdim=True)
         centered = x - mu
         std = centered.std(dim=-1, keepdim=True)
-        normalized = centered / (std + eps)
-        return normalized, mu, std
+        return centered / (std + eps), mu, std
 
     def preprocess(self, x: torch.Tensor):
         if not self.normalize:
@@ -135,18 +118,12 @@ def load_openai_sae(
     width: SAEWidth,
     device: torch.device | str,
 ):
-    """Load one of OpenAI's released GPT-2 Small v5 SAEs.
-
-    Only ``blobfile`` is needed at runtime; the upstream package itself is not
-    installed because its pinned 2023-era dependencies conflict with current
-    TransformerLens and Colab.
-    """
+    """Load official OpenAI weights without installing their pinned old package."""
     import blobfile as bf
 
     path = _openai_v5_path(location, layer, width)
     with bf.BlobFile(path, mode="rb") as f:
         state_dict = torch.load(f, map_location="cpu", weights_only=False)
-
     sae = OpenAIGPT2SAE(dict(state_dict))
     sae.to(device)
     sae.eval()
@@ -165,7 +142,16 @@ def decoder_direction(sae, feature_id: int, *, unit_norm: bool = True) -> torch.
 
 
 @torch.no_grad()
+def feature_pre_activation(sae, activations: torch.Tensor, feature_id: int) -> torch.Tensor:
+    """Target encoder pre-activation before TopK gating, for vector sanity checks."""
+    x, _ = sae.preprocess(activations)
+    x = x - sae.pre_bias
+    weight = sae.encoder.weight[feature_id : feature_id + 1]
+    bias = sae.latent_bias[feature_id : feature_id + 1]
+    return F.linear(x, weight, bias).squeeze(-1)
+
+
+@torch.no_grad()
 def encode_feature(sae, activations: torch.Tensor, feature_id: int) -> torch.Tensor:
-    """Encode activations and return one target latent with input shape preserved except d_model."""
     latents, _ = sae.encode(activations)
     return latents[..., feature_id]
