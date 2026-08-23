@@ -16,11 +16,11 @@
 
 1. **DPAR (Direction-Preserving Activation Repair).** Обычный Gaussian-denoiser при сильном steering частично улучшает связность просто потому, что отменяет сам steering. DPAR удаляет из поправки компоненту вдоль steering-вектора и сохраняет запрошенный `alpha` с численной точностью. В финальном плотном held-out sweep полный DPAR дал локальный выигрыш на высоком concept: `F@C90 = 71.45` против `66.46` у additive steering (`+4.99`). Это локальный, а не универсальный Pareto-выигрыш.
 2. **JRR (Jacobian Residual Repair).** Сильный steering создаёт большой downstream-нелинейный остаток Тейлора. Его норма растёт примерно как `alpha^1.9849`, а при `alpha=3` становится почти равной по масштабу всему first-order эффекту `alpha Jv`. Причинное удаление остатка улучшает fluency/NLL, но показывает, что часть нелинейной динамики одновременно несёт полезный concept-сигнал.
-3. **KL-Selective JRR.** Следующая гипотеза удаляет только локально KL-вредную компоненту нелинейного остатка. В сильном режиме она составляет в среднем лишь **7.93%** нормы `R_orth`, но уменьшает локальный KL на **41.6%**. Однако заранее зафиксированный сильный calibration gate не пройден: локальная next-token геометрия не гарантирует сохранение long-horizon concept. Новый held-out поэтому не открывался.
+3. **KL-Selective JRR.** Следующая гипотеза удаляет только локально KL-вредную компоненту нелинейного остатка. В сильном режиме она составляет в среднем лишь **7.93%** нормы `R_orth`, но уменьшает локальный KL на **41.6%**. Однако заранее зафиксированный сильный calibration gate не пройден: локальная next-token геометрия не гарантирует сохранение долгосрочного concept. Новый held-out поэтому не открывался.
 
 Главный механистический вывод:
 
-> Деградация при сильном steering состоит как минимум из двух разных эффектов: learned repair может отменять сам steering, а собственная downstream-динамика модели становится существенно нелинейной. При этом «ортогонально steering-направлению» не означает «семантически неважно». Поэтому качественный repair должен сохранять больше, чем исходную steering-ось или её локальный first-order образ.
+> Деградация при сильном steering состоит как минимум из двух разных эффектов: обученный repair может отменять сам steering, а собственная downstream-динамика модели становится существенно нелинейной. При этом «ортогонально steering-направлению» не означает «семантически неважно». Поэтому качественный repair должен сохранять больше, чем исходную steering-ось или её локальный first-order образ.
 
 ## Экспериментальная схема
 
@@ -50,8 +50,8 @@ Baseline воспроизводит требуемый trade-off: concept рас
 | [`successful_sentiment_baseline`](experiments/successful_sentiment_baseline/) | валидированный additive baseline | требуемый Pareto trade-off воспроизведён |
 | [`repair_suite`](experiments/repair_suite/) | Gaussian denoiser, DPAR, structured corruption | найдено steering cancellation; structured corruption не помог |
 | [`retrained_gaussian_followups`](experiments/retrained_gaussian_followups/) | свежий retrain + dense sweep | детерминированный retrain; локальный DPAR-выигрыш `+4.99` на C90 |
-| [`jacobian_residual_repair`](experiments/jacobian_residual_repair/) | новая гипотеза о downstream-нелинейности | сильный mechanistic result, mixed practical oracle |
-| [`selective_jrr`](experiments/selective_jrr/) | selective repair нелинейного остатка | частично положительный механизм, strong-regime gate не пройден |
+| [`jacobian_residual_repair`](experiments/jacobian_residual_repair/) | новая гипотеза о downstream-нелинейности | сильный mechanistic result; практический oracle-эффект неоднороден |
+| [`selective_jrr`](experiments/selective_jrr/) | selective repair нелинейного остатка | частично положительный механизм; strong-regime gate не пройден |
 
 Отрицательные результаты сохранены намеренно: они показывают, какие интуитивные объяснения не выдержали причинной проверки.
 
@@ -84,7 +84,7 @@ notebooks/selective_jrr_experiment_colab.ipynb
 
 ## Hugging Face
 
-Публичный репозиторий лучшего practical learned component:
+Публичный репозиторий лучшего практического обученного компонента:
 
 **https://huggingface.co/Nek1tt/steering-repair-gpt2**
 
@@ -115,7 +115,7 @@ notebooks/     воспроизводимые сценарии запуска
 configs/       зафиксированные конфиги
 src/           реализация методов
 scripts/       CLI для обучения, evaluation и preflight
- tests/         unit tests
+tests/         unit tests
 huggingface/   шаблон model card и публикация checkpoint
 ```
 
