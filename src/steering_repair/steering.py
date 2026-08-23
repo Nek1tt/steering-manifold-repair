@@ -34,7 +34,12 @@ def get_repair(name: str) -> RepairFn:
 
 @dataclass
 class SteeringHook:
-    """Steer only the final sequence position, matching response-token steering."""
+    """Steer only the final sequence position, matching response-token steering.
+
+    ``vector_alpha`` implements the literal intervention used by contrastive/persona
+    vectors: ``h <- h + alpha * v`` while preserving the original magnitude of ``v``.
+    Other modes keep the historical unit-direction parameterization.
+    """
 
     direction: torch.Tensor
     strength: float
@@ -42,7 +47,9 @@ class SteeringHook:
     repair: str = "identity"
 
     def __post_init__(self) -> None:
-        self.direction = self.direction / self.direction.norm().clamp_min(1e-12)
+        norm = self.direction.norm().clamp_min(1e-12)
+        self._direction_norm = norm.detach().clone()
+        self.direction = self.direction / norm
         self._repair_fn = get_repair(self.repair)
 
     def _delta(self, clean_last: torch.Tensor) -> torch.Tensor:
@@ -52,6 +59,12 @@ class SteeringHook:
             return self.strength * clean_last.norm(dim=-1, keepdim=True) * v
         if self.strength_mode == "raw":
             return self.strength * v
+        if self.strength_mode == "vector_alpha":
+            # Literal persona/contrastive steering: h <- h + alpha * raw_vector.
+            vector_norm = self._direction_norm.to(
+                device=clean_last.device, dtype=clean_last.dtype
+            )
+            return self.strength * vector_norm * v
         if self.strength_mode == "sae_alpha":
             # OpenAI v5 TopK SAEs normalize each token vector by its scalar std.
             # h_norm -> h_norm + alpha*v therefore maps back to
