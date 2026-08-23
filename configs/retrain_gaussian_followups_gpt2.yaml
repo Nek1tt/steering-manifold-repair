@@ -63,7 +63,8 @@ followup:
 
   calibration:
     prompts_path: data/calibration_prompts.txt
-    strengths: [0.75, 1.00, 1.25, 1.50, 1.75, 2.00, 2.25, 2.50, 3.00]
+    # alpha=0 is required as the common fluency anchor used by aggregate_repairs.
+    strengths: [0.0, 0.75, 1.00, 1.25, 1.50, 1.75, 2.00, 2.25, 2.50, 3.00]
     seeds: [37]
     max_new_tokens: 48
     temperature: 0.9
@@ -72,7 +73,8 @@ followup:
 
   evaluation:
     prompts_path: data/prompts.txt
-    strengths: [0.75, 1.00, 1.25, 1.50, 1.75, 2.00, 2.25, 2.50, 3.00]
+    # alpha=0 is required as the common fluency anchor used by aggregate_repairs.
+    strengths: [0.0, 0.75, 1.00, 1.25, 1.50, 1.75, 2.00, 2.25, 2.50, 3.00]
     seeds: [11, 23]
     max_new_tokens: 64
     temperature: 0.9
