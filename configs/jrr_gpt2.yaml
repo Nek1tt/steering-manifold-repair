@@ -1,0 +1,60 @@
+model:
+  name: gpt2
+  device: auto
+  dtype: float32
+
+vector:
+  layer: 6
+  hook_name: blocks.6.hook_resid_post
+  cache_path: results/sentiment_direction.pt
+
+judge:
+  model_name: distilbert-base-uncased-finetuned-sst-2-english
+  batch_size: 32
+
+jrr:
+  output_dir: results/jrr
+  source_hook: blocks.6.hook_resid_post
+
+  diagnostic:
+    prompts_path: data/calibration_prompts.txt
+    max_prompts: 8
+    strengths: [0.0, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0, 2.25, 2.5, 3.0]
+    target_hooks:
+      - blocks.7.hook_resid_post
+      - blocks.8.hook_resid_post
+      - blocks.9.hook_resid_post
+      - blocks.10.hook_resid_post
+      - blocks.11.hook_resid_post
+    jvp_mode: autograd
+    fallback_to_finite_difference: true
+    finite_difference_epsilon: 0.01
+    behavior_seed: 37
+    behavior_max_new_tokens: 32
+    temperature: 0.9
+    top_p: 0.95
+    gate_min_rank_correlation: 0.40
+    gate_min_orthogonal_fraction: 0.20
+
+  oracle:
+    target_hook: auto
+    beta: 1.0
+    methods: [additive, jrr_orth]
+    concept_thresholds: [80, 85, 90]
+    gate_min_fluency_gain: 2.0
+    calibration:
+      prompts_path: data/calibration_prompts.txt
+      max_prompts: 6
+      strengths: [0.0, 1.0, 1.5, 2.0, 2.5, 3.0]
+      seeds: [37]
+      max_new_tokens: 24
+      temperature: 0.9
+      top_p: 0.95
+    evaluation:
+      prompts_path: data/prompts.txt
+      max_prompts: 20
+      strengths: [0.0, 1.0, 1.25, 1.5, 1.75, 2.0, 2.25, 2.5, 3.0]
+      seeds: [11, 23]
+      max_new_tokens: 48
+      temperature: 0.9
+      top_p: 0.95
