@@ -26,15 +26,15 @@
 
 Успешный baseline использует contrastive sentiment direction в середине GPT-2 Small:
 
-\[
+$$
 v = \mathbb{E}[h\mid\text{positive}] - \mathbb{E}[h\mid\text{negative}],
-\]
+$$
 
 в точке `blocks.6.hook_resid_post` с интервенцией
 
-\[
+$$
 h' = h + \alpha v.
-\]
+$$
 
 Concept score — вероятность positive sentiment по независимому локальному SST-2 classifier. Fluency score объединяет clean-model NLL, `distinct-3` и штраф за повторение 3-грамм, нормированный относительно `alpha=0`.
 
