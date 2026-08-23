@@ -1,0 +1,28 @@
+model:
+  name: gpt2-small
+  device: auto
+  dtype: float32
+
+sae:
+  location: resid_post_mlp
+  layer: 8
+  width: 128k
+  feature_id: 56907
+  feature_label: words_in_quotes
+
+steering:
+  hook_name: blocks.8.hook_resid_post
+  strength_mode: norm_ratio
+  strengths: [0.0, 0.05, 0.10, 0.20, 0.35, 0.50, 0.75, 1.00]
+  repair: identity
+
+sampling:
+  max_new_tokens: 80
+  temperature: 0.9
+  top_p: 0.95
+  seeds: [11, 23, 37]
+
+experiment:
+  prompts_path: data/prompts.txt
+  output_csv: results/baseline_samples.csv
+  save_every: 5
