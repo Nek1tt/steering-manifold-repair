@@ -47,12 +47,7 @@ vanilla Gaussian correction всё сильнее направляется пр�
 DPAR использует явное ортогональное разложение:
 
 $$
-\Delta_\perp
-=
-\Delta-
-\frac{\langle \Delta,v\rangle}{\langle v,v\rangle}v,
-\qquad
-h_{out}=z+\Delta_\perp.
+\Delta_\perp = \Delta - \frac{\langle \Delta,v\rangle}{\langle v,v\rangle}v,\qquad h_{out}=z+\Delta_\perp.
 $$
 
 Тем самым steering-cancellation confound устраняется по построению. Поправка при этом остаётся существенной: DPAR не превращается в identity.
