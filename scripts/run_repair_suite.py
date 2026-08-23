@@ -17,16 +17,11 @@ def main() -> None:
     parser.add_argument("--config", default="configs/repair_suite_gpt2.yaml")
     parser.add_argument("--force-cache", action="store_true")
     args = parser.parse_args()
-    cfg = yaml.safe_load(Path(args.config).read_text())
+    yaml.safe_load(Path(args.config).read_text())
 
-    direction_path = Path(cfg["vector"]["cache_path"])
-    if not direction_path.exists():
-        run(
-            sys.executable,
-            "scripts/validate_sentiment_baseline.py",
-            "--config",
-            "configs/baseline_sentiment_gpt2.yaml",
-        )
+    # Fail fast on the external dataset + TransformerLens hook boundary before
+    # spending time on the 80k-activation cache or denoiser training.
+    run(sys.executable, "scripts/preflight_repair_suite.py", "--config", args.config)
 
     cache_cmd = [sys.executable, "scripts/cache_activations.py", "--config", args.config]
     if args.force_cache:
