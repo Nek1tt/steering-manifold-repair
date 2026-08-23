@@ -37,10 +37,7 @@ $$
 DPAR удаляет из неё компоненту вдоль steering direction. В явном виде:
 
 $$
-\Delta_\perp
-=
-\Delta-
-\frac{\langle \Delta,v\rangle}{\langle v,v\rangle}v,
+\Delta_\perp = \Delta - \frac{\langle \Delta,v\rangle}{\langle v,v\rangle}v.
 $$
 
 $$
