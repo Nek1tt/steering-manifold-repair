@@ -199,4 +199,8 @@ Reference Gaussian validation relative MSE improvement:
 
 ## 7. Submission checkpoint
 
-The best practical checkpoint remains the deterministically reproduced Gaussian activation denoiser used with DPAR geometry. The repository includes packaging instructions/scripts for publishing this checkpoint to a public Hugging Face repository. The Hugging Face URL should be added to the repository before submission.
+The best practical learned checkpoint is the deterministically reproduced Gaussian activation denoiser used with DPAR geometry.
+
+**Public Hugging Face repository:** [Nek1tt/steering-repair-gpt2](https://huggingface.co/Nek1tt/steering-repair-gpt2)
+
+The model repository contains `retrained_denoiser_gaussian.pt`, a model card, checkpoint metadata, the frozen training configuration, and the training history. DPAR is an inference-time projection of the denoiser correction and is therefore documented with the checkpoint rather than encoded into its weights.
