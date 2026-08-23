@@ -156,18 +156,18 @@ pytest -q tests/test_denoiser.py tests/test_inference_followups.py tests/test_jr
 
 ## Hugging Face checkpoint
 
-The assignment requires the best learned adapter/checkpoint in a public Hugging Face repository.
+The best practical learned component is the deterministically reproduced Gaussian activation denoiser used with DPAR.
 
-The best practical learned component is the deterministically reproduced Gaussian activation denoiser used with DPAR. A final model card and upload helper are included:
+**Public checkpoint:** [Nek1tt/steering-repair-gpt2](https://huggingface.co/Nek1tt/steering-repair-gpt2)
+
+The Hugging Face repository contains the trained checkpoint together with its model card, metadata, frozen training configuration, and training history. DPAR itself is inference-time geometry applied to the denoiser correction and is not encoded in the checkpoint weights.
+
+Packaging files are retained in this repository:
 
 ```text
 huggingface/MODEL_CARD.md
 scripts/publish_best_checkpoint_hf.py
 ```
-
-See [`FINAL_SUBMISSION_CHECKLIST.md`](FINAL_SUBMISSION_CHECKLIST.md) for the exact upload commands.
-
-**Public Hugging Face URL:** _add before submission_
 
 ## Reproducibility rules
 
