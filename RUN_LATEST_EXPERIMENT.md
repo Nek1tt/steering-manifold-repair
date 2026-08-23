@@ -14,7 +14,22 @@ Time-boxed execution instructions:
 experiments/selective_jrr/RUNBOOK.md
 ```
 
-Recommended notebook:
+## Recommended local Windows / VS Code path
+
+Local setup:
+
+```text
+LOCAL_WINDOWS_VSCODE.md
+requirements-local-windows.txt
+```
+
+VS Code Jupyter notebook:
+
+```text
+notebooks/selective_jrr_vscode_windows.ipynb
+```
+
+The older Colab notebook remains available at:
 
 ```text
 notebooks/selective_jrr_experiment_colab.ipynb
