@@ -2,8 +2,6 @@
 
 Исследовательский проект по механистической интерпретируемости: **как уменьшить потерю связности текста при сильном activation steering** в GPT-2 Small.
 
-Вместо одного «лучшего трюка» работа последовательно разбирает два разных механизма деградации и проверяет гипотезы, возникающие из ошибок предыдущих методов.
-
 ## Главное
 
 Полный отчёт: **[`report/README.md`](report/README.md)**.
@@ -40,7 +38,7 @@ Concept score — вероятность positive sentiment по независ�
 
 Baseline воспроизводит требуемый trade-off: concept растёт примерно с `27.9` до `95+`, а fluency при сильном steering падает со `100` до значений порядка `18` и ниже.
 
-> Тексты prompts и sentiment-примеров в `data/` оставлены на английском намеренно: GPT-2 и sentiment judge тестировались на английской генерации. Это экспериментальные данные, а не документация.
+> Тексты prompts и sentiment-примеров в `data/` оставлены на английском намеренно: GPT-2 и sentiment judge тестировались на английской генерации.
 
 ## Архив экспериментов
 
@@ -52,8 +50,6 @@ Baseline воспроизводит требуемый trade-off: concept рас
 | [`retrained_gaussian_followups`](experiments/retrained_gaussian_followups/) | свежий retrain + dense sweep | детерминированный retrain; локальный DPAR-выигрыш `+4.99` на C90 |
 | [`jacobian_residual_repair`](experiments/jacobian_residual_repair/) | новая гипотеза о downstream-нелинейности | сильный mechanistic result; практический oracle-эффект неоднороден |
 | [`selective_jrr`](experiments/selective_jrr/) | selective repair нелинейного остатка | частично положительный механизм; strong-regime gate не пройден |
-
-Отрицательные результаты сохранены намеренно: они показывают, какие интуитивные объяснения не выдержали причинной проверки.
 
 ## Воспроизведение
 
@@ -118,11 +114,3 @@ scripts/       CLI для обучения, evaluation и preflight
 tests/         unit tests
 huggingface/   шаблон model card и публикация checkpoint
 ```
-
-## Ссылки
-
-- TransformerLens: https://github.com/TransformerLensOrg/TransformerLens
-- OpenAI Sparse Autoencoder: https://github.com/openai/sparse_autoencoder
-- SAELens: https://github.com/decoderesearch/SAELens
-- Persona Vectors: https://github.com/safety-research/persona_vectors
-- Generative Latent Prior: https://generative-latent-prior.github.io/
