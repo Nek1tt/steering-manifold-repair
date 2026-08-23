@@ -1,239 +1,183 @@
 # Steering Manifold Repair
 
-Research project for the interpretability task: reproduce activation-steering degradation, then test cheap learned and geometric ways to push the concept/fluency Pareto frontier up and to the right.
+Mechanistic-interpretability project on **coherence-preserving activation steering** in GPT-2 Small.
 
-## Status
+The project begins with the standard failure mode: stronger activation steering increases the target concept but eventually damages language-model coherence. We reproduce that trade-off, evaluate learned activation denoisers, and then follow the failures of those methods into two new mechanistic hypotheses about why strong steering breaks downstream computation.
 
-The required additive steering baseline has been reproduced successfully on GPT-2 Small at the midpoint layer.
+## Final results
 
-The first SAE-feature attempt is preserved as a negative result in:
+The complete final report is in [`FINAL_RESULTS.md`](FINAL_RESULTS.md).
 
-```text
-experiments/failed_sae_profanity/
-```
+The main research contributions are:
 
-The successful control experiment is preserved in:
+1. **Direction-Preserving Activation Repair (DPAR).** Vanilla activation denoising increasingly cancels the requested steering direction. DPAR removes that parallel correction exactly, preserving requested alpha to numerical precision. Full DPAR retains a local held-out high-concept advantage (`F@C90=71.45` vs additive `66.46`).
+2. **Jacobian Residual Repair (JRR).** Strong steering creates a downstream nonlinear Taylor remainder whose norm grows approximately as `alpha^1.9849`, almost exactly the second-order prediction. In the strong regime the nonlinear response becomes comparable in norm to the entire first-order transported steering effect. Causal removal recovers fluency but reveals that some orthogonal nonlinear computation also carries useful concept information.
+3. **KL-Selective JRR.** A follow-up preregistered after JRR isolates a compact local KL-sensitive mode inside the nonlinear remainder. Across strong calibration strengths it removes only `7.93%` of `R_orth` on average while lowering local KL by `41.6%`, but it fails the frozen long-horizon concept/fluency gate. The newly frozen held-out was therefore intentionally not opened.
 
-```text
-experiments/successful_sentiment_baseline/
-```
+The strongest combined claim is mechanistic rather than universal-SOTA:
 
-It uses a persona-style contrastive sentiment direction
+> Coherence loss under strong steering arises from at least two separable failures: learned denoisers can cancel the requested steering axis, while the model's own downstream nonlinear response becomes large enough to rival the first-order steering effect. That nonlinear response contains both fluency-damaging and concept-carrying computation, so preserving only the original steering direction—or even its locally transported image—is not sufficient.
+
+## Experiment archive
+
+| experiment | role | result |
+|---|---|---|
+| [`failed_sae_profanity/`](experiments/failed_sae_profanity/) | vector validation | negative: concept score did not move |
+| [`successful_sentiment_baseline/`](experiments/successful_sentiment_baseline/) | frozen additive baseline | positive trade-off reproduced |
+| [`repair_suite/`](experiments/repair_suite/) | denoiser + DPAR + structured corruption | DPAR mechanism validated; structured corruption negative |
+| [`retrained_gaussian_followups/`](experiments/retrained_gaussian_followups/) | fresh retrain + dense held-out | deterministic retrain; local DPAR gains |
+| [`jacobian_residual_repair/`](experiments/jacobian_residual_repair/) | new nonlinear-propagation hypothesis | strong mechanistic positive, mixed practical oracle |
+| [`selective_jrr/`](experiments/selective_jrr/) | harmful-mode-selective follow-up | partial/negative; fresh held-out kept untouched |
+
+Negative results and failed hypotheses are retained deliberately.
+
+## Core setup
+
+The successful baseline uses a persona-style sentiment direction
 
 \[
 v = \mathbb{E}[h\mid\text{positive}] - \mathbb{E}[h\mid\text{negative}]
 \]
 
-at `blocks.6.hook_resid_post`, with literal response-token steering
+at
+
+```text
+blocks.6.hook_resid_post
+```
+
+with literal response-token steering
 
 \[
 h' = h + \alpha v.
 \]
 
-The frozen baseline produced the expected trade-off: positive-sentiment concept score rises from about 28 to above 90 while stronger steering eventually collapses fluency. The main comparison region for repair methods is `alpha=0.5..4.0`.
+The concept score rises from roughly 28 to above 90 while sufficiently strong steering collapses fluency.
 
-## New research stage: repair hypotheses
+## DPAR
 
-The repository now implements the assignment-proposed denoiser plus two extensions intended to test something genuinely new.
-
-### B2 — Gaussian activation denoiser
-
-Train a small residual MLP on generic natural layer-6 activations only:
+For steered activation
 
 \[
-\tilde h = h + \delta,\qquad D_\theta(\tilde h, r)\approx h,
+z=h+\alpha v
 \]
 
-where corruption magnitude is parameterized by
+and denoiser correction
 
 \[
-r = \|\delta\|/\|h\|.
+\Delta=D(z)-z,
 \]
 
-The network is conditioned on `r`, so one checkpoint can handle weak through severe steering.
-
-### M1 — Direction-Preserving Activation Repair (DPAR)
-
-For a steered activation `z = h + alpha*v`, let the denoiser propose
+DPAR applies only
 
 \[
-\Delta = D(z)-z.
+\Delta_\perp=\Delta-\operatorname{proj}_v(\Delta),
 \]
 
-A vanilla denoiser may recover fluency by simply cancelling the intended direction. DPAR removes the correction parallel to the steering vector:
+so
 
 \[
-\Delta_\perp = \Delta - \operatorname{proj}_v(\Delta),
+h_{\mathrm{DPAR}}=z+\Delta_\perp.
 \]
+
+This prevents the repair method from obtaining apparent fluency improvements merely by undoing steering.
+
+## JRR
+
+For downstream map `F`, JRR measures
 
 \[
-h_{\mathrm{DPAR}} = z + \Delta_\perp.
+R_\alpha = F(h+\alpha v)-F(h)-\alpha J_F(h)v.
 \]
 
-This preserves the requested steering component by construction while still allowing orthogonal manifold repair.
-
-### M2 — Structured corruption training
-
-Steering perturbations are directional rather than isotropic. A second denoiser is therefore trained on a 50/50 mixture of:
-
-- isotropic Gaussian directions;
-- normalized random natural activation differences `h_j - h_k`.
-
-The held-out sentiment steering direction is never used in denoiser training.
-
-## Methods evaluated
-
-The frozen suite compares:
-
-```text
-additive
-norm_preserving
-gaussian
-gaussian_lambda05
-gaussian_dpar
-mixed
-mixed_dpar
-```
-
-`gaussian_lambda05` is a partial direction-preservation ablation. `mixed_dpar` is the full structured-corruption + DPAR candidate method.
-
-## Mechanistic analysis
-
-The repair evaluator records more than final text scores. For every learned intervention it measures:
-
-- requested vs effective alpha after repair;
-- cosine between the denoiser correction and steering vector;
-- fraction of correction norm parallel to the steering vector;
-- correction norm relative to the steering perturbation;
-- clean-model NLL, distinct-1/2/3 and 3-gram repetition;
-- independent local sentiment concept score.
-
-This directly tests whether a method actually repairs off-manifold damage or only weakens steering.
+The observed near-quadratic growth and causal interventions are documented in [`experiments/jacobian_residual_repair/RESULTS.md`](experiments/jacobian_residual_repair/RESULTS.md).
 
 ## Installation
+
+### Linux / Colab
 
 ```bash
 pip install -r requirements.txt
 pip install -e .
 ```
 
-A Hugging Face token is optional but recommended in Colab for higher download limits.
+### Windows + NVIDIA GPU + VS Code Jupyter
 
-## Reproduce the successful additive baseline
+See [`LOCAL_WINDOWS_VSCODE.md`](LOCAL_WINDOWS_VSCODE.md).
 
-```bash
-python scripts/validate_sentiment_baseline.py \
-  --config configs/baseline_sentiment_gpt2.yaml
+Recommended local notebook for the latest experiment:
 
-python scripts/run_sentiment_baseline.py \
-  --config configs/baseline_sentiment_gpt2.yaml
-
-python scripts/plot_sentiment_baseline.py \
-  --config configs/baseline_sentiment_gpt2.yaml
+```text
+notebooks/selective_jrr_vscode_windows.ipynb
 ```
 
-Once it has passed, do not retune prompts, seeds, vector data, judge, or the fluency definition.
+## Reproduction entry points
 
-## Run the full repair suite
+Additive baseline:
 
-The recommended Colab entry point is:
+```text
+notebooks/baseline_colab.ipynb
+```
+
+Denoiser / DPAR suite:
 
 ```text
 notebooks/repair_experiments_colab.ipynb
 ```
 
-Or run everything from the CLI:
-
-```bash
-python scripts/run_repair_suite.py \
-  --config configs/repair_suite_gpt2.yaml
-```
-
-The full runner performs:
-
-1. cache up to 80k generic WikiText-2 layer-6 activations;
-2. train the Gaussian denoiser;
-3. train the mixed structured denoiser;
-4. evaluate all additive / learned / DPAR methods on the frozen sentiment baseline;
-5. build Pareto and mechanistic plots;
-6. write a descriptive hypothesis report.
-
-Individual stages can be run separately:
-
-```bash
-python scripts/cache_activations.py --config configs/repair_suite_gpt2.yaml
-python scripts/train_denoiser.py --config configs/repair_suite_gpt2.yaml --kind gaussian
-python scripts/train_denoiser.py --config configs/repair_suite_gpt2.yaml --kind mixed
-python scripts/eval_repairs.py --config configs/repair_suite_gpt2.yaml
-python scripts/plot_repairs.py --config configs/repair_suite_gpt2.yaml
-```
-
-## Important outputs
+Fresh deterministic Gaussian retrain + dense DPAR follow-up:
 
 ```text
-results/layer6_generic_activations.pt
-checkpoints/denoiser_gaussian.pt
-checkpoints/denoiser_mixed.pt
-results/repair_suite_samples.csv
-results/repair_suite/repair_pareto.png
-results/repair_suite/effective_alpha.png
-results/repair_suite/correction_geometry.png
-results/repair_suite/frontier_summary.csv
-results/repair_suite/hypothesis_report.md
+notebooks/retrain_gaussian_followups_fresh_colab.ipynb
 ```
 
-Generated caches, checkpoints and raw results are gitignored. The best final adapter/checkpoint should later be uploaded to Hugging Face as required by the assignment.
-
-## Repository layout
+JRR:
 
 ```text
-configs/
-  baseline_sentiment_gpt2.yaml
-  repair_suite_gpt2.yaml
-
-data/
-  sentiment_positive.txt
-  sentiment_negative.txt
-  calibration_prompts.txt
-  prompts.txt
-
-experiments/
-  failed_sae_profanity/
-  successful_sentiment_baseline/
-  repair_suite/
-
-notebooks/
-  baseline_colab.ipynb
-  repair_experiments_colab.ipynb
-
-scripts/
-  validate_sentiment_baseline.py
-  run_sentiment_baseline.py
-  plot_sentiment_baseline.py
-  cache_activations.py
-  train_denoiser.py
-  eval_repairs.py
-  plot_repairs.py
-  run_repair_suite.py
-
-src/steering_repair/
-  sentiment_baseline.py
-  activation_cache.py
-  denoiser.py
-  train_denoiser.py
-  repair_experiment.py
-  steering.py
-  generation.py
-  metrics.py
+notebooks/jrr_experiment_colab.ipynb
 ```
+
+KL-Selective JRR on Windows/VS Code:
+
+```text
+notebooks/selective_jrr_vscode_windows.ipynb
+```
+
+## Tests
+
+```bash
+pytest -q
+```
+
+Focused final-method tests:
+
+```bash
+pytest -q tests/test_denoiser.py tests/test_inference_followups.py tests/test_jrr.py tests/test_selective_jrr.py
+```
+
+## Hugging Face checkpoint
+
+The assignment requires the best learned adapter/checkpoint in a public Hugging Face repository.
+
+The best practical learned component is the deterministically reproduced Gaussian activation denoiser used with DPAR. A final model card and upload helper are included:
+
+```text
+huggingface/MODEL_CARD.md
+scripts/publish_best_checkpoint_hf.py
+```
+
+See [`FINAL_SUBMISSION_CHECKLIST.md`](FINAL_SUBMISSION_CHECKLIST.md) for the exact upload commands.
+
+**Public Hugging Face URL:** _add before submission_
 
 ## Reproducibility rules
 
-- Keep the successful additive baseline frozen for all repair comparisons.
-- Never expose the held-out evaluation steering vector to denoiser training.
-- Compare methods by Pareto frontier, not by the same raw alpha only.
-- Always compare a repaired point with smaller-alpha additive steering so cancellation cannot masquerade as repair.
-- Preserve negative results and ablations.
+- Frozen baseline prompts/seeds are not retuned for repair methods.
+- Evaluation steering vectors are not used to train denoisers.
+- Pareto comparisons use dense/interpolated frontiers where appropriate.
+- Repair geometry is inspected to rule out steering cancellation.
+- New methods motivated by held-out results receive a newly frozen held-out split.
+- Failed gates are not relaxed post hoc.
+- Negative results and ablations remain in the repository.
 
 ## References
 
