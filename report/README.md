@@ -366,30 +366,7 @@ go_to_new_heldout = false
 
 Таким образом, работа не ограничивается сравнением final scores: каждый новый эксперимент появляется из конкретного failure mode предыдущего и либо подтверждает, либо опровергает механизм.
 
-## 10. Соответствие критериям задания
-
-### Идеи шире предложенного denoiser baseline
-
-В задании прямо предлагается попробовать простой denoiser и подумать о более хитрых способах repair. Здесь Gaussian reconstruction — только отправная точка. DPAR появляется из измеренной steering-cancellation geometry, JRR — из отдельной гипотезы о downstream Taylor nonlinearity, а KL-JRR — из causal failure mode полного JRR.
-
-### Есть ли метод, работающий лучше additive steering
-
-Да, но утверждение намеренно локальное: dense held-out показывает **+4.99 fluency points на C90** для заранее включённого full-DPAR control относительно additive. В других concept regions DPAR не доминирует, и это прямо отражено в отчёте.
-
-### Анализ «почему и как»
-
-Основные claims опираются не только на final generation score:
-
-- effective `alpha` и cosine correction диагностируют cancellation;
-- reconstruction cross-evaluation отделяет качество denoiser от downstream behavior;
-- JVP/Taylor decomposition измеряет размер nonlinear response;
-- exact causal JRR удаляет выбранный компонент состояния;
-- seed-wise analysis и paired bootstrap проверяют устойчивость;
-- KL-JRR причинно тестирует более узкую harmful-mode hypothesis и сохраняет failed gate без post-hoc relaxation.
-
-Это и есть основная исследовательская часть работы.
-
-## 11. Ограничения
+## 10. Ограничения
 
 - Проверена только GPT-2 Small.
 - Основной валидированный concept — positive sentiment; generalization на другие steering directions не доказана.
@@ -399,7 +376,7 @@ go_to_new_heldout = false
 - DPAR гарантирует сохранение projection вдоль `v`, но не гарантирует сохранение всей нелинейной семантики модели.
 - Bootstrap для JRR был сделан post-hoc и используется только как описательная устойчивость NLL-сигнала.
 
-## 12. Воспроизводимость
+## 11. Воспроизводимость
 
 В репозитории сохранены:
 
@@ -428,8 +405,6 @@ notebooks/selective_jrr_experiment_colab.ipynb
 
 Это Gaussian activation denoiser; DPAR применяется к его correction на inference-time.
 
-## 13. Итог
-
-Самая сильная формулировка результата:
+## 12. Итог
 
 > Vanilla activation denoising имеет измеримый steering-cancellation failure mode, который DPAR устраняет по построению и даёт локальный high-concept Pareto-выигрыш. Независимо от этого сильный steering создаёт приблизительно квадратичную downstream-нелинейность, которая в сильном режиме сопоставима с first-order steering. Причинные интервенции показывают, что эта нелинейность содержит как fluency-damaging, так и concept-carrying computation. Поэтому coherence-preserving steering требует сохранять больше, чем исходную steering-ось, её first-order transported image или локальный one-step KL objective.
