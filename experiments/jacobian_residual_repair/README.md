@@ -8,33 +8,33 @@
 
 Для downstream map `F`, clean state `h`, steering direction `v` и силы `alpha`:
 
-\[
+$$
 y_0=F(h),\qquad y_\alpha=F(h+\alpha v),
-\]
+$$
 
-\[
+$$
 t=J_F(h)v,
-\]
+$$
 
-\[
+$$
 R_\alpha=y_\alpha-y_0-\alpha t.
-\]
+$$
 
 `t` — first-order transported steering direction, `R_alpha` — точный nonlinear Taylor remainder.
 
 Разлагаем
 
-\[
+$$
 R_\parallel=\operatorname{proj}_t(R_\alpha),
 \qquad
 R_\perp=R_\alpha-R_\parallel.
-\]
+$$
 
 Oracle JRR применяет
 
-\[
+$$
 y_{repair}=y_\alpha-\beta R_\perp,
-\]
+$$
 
 с заранее фиксированным `beta=1`.
 
