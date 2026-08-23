@@ -17,7 +17,16 @@ def main() -> None:
     parser.add_argument("--config", default="configs/repair_suite_gpt2.yaml")
     parser.add_argument("--force-cache", action="store_true")
     args = parser.parse_args()
-    yaml.safe_load(Path(args.config).read_text())
+    cfg = yaml.safe_load(Path(args.config).read_text())
+
+    direction_path = Path(cfg["vector"]["cache_path"])
+    if not direction_path.exists():
+        run(
+            sys.executable,
+            "scripts/validate_sentiment_baseline.py",
+            "--config",
+            "configs/baseline_sentiment_gpt2.yaml",
+        )
 
     cache_cmd = [sys.executable, "scripts/cache_activations.py", "--config", args.config]
     if args.force_cache:
