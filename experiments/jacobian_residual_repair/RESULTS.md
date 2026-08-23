@@ -21,9 +21,9 @@ Calibration выбрала target: `blocks.7.hook_resid_post`.
 
 Для
 
-\[
+$$
 R_\alpha = F(h+\alpha v)-F(h)-\alpha J_F(h)v
-\]
+$$
 
 получено:
 
