@@ -1,0 +1,6 @@
+target_hook,loglog_residual_slope,rank_corr_orthogonal_residual_vs_nll,rank_corr_orthogonal_residual_vs_fluency,mean_orthogonal_fraction,mechanistic_score
+blocks.7.hook_resid_post,1.98486423,0.89090909,-0.89090909,0.94043811,2.51188245
+blocks.8.hook_resid_post,1.78405771,0.89090909,-0.89090909,0.91777157,2.43928031
+blocks.9.hook_resid_post,1.76834300,0.89090909,-0.89090909,0.92065836,2.43476377
+blocks.11.hook_resid_post,1.76124833,0.89090909,-0.89090909,0.92056031,2.43237437
+blocks.10.hook_resid_post,1.75593147,0.89090909,-0.89090909,0.91946923,2.43032931
