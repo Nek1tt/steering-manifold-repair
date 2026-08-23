@@ -8,6 +8,7 @@ venv/
 results/*.csv
 results/*.png
 results/*.json
+results/*.pt
 checkpoints/
 wandb/
 .DS_Store
