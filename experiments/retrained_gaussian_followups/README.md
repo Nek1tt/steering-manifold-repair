@@ -67,15 +67,15 @@ DPAR сохраняет effective `alpha` по построению, тогда 
 
 Full DPAR `beta=1` даёт
 
-\[
+$$
 F@C90=71.45
-\]
+$$
 
 против
 
-\[
+$$
 F@C90=66.46
-\]
+$$
 
 у additive: **+4.99 fluency points**.
 
