@@ -10,7 +10,7 @@ vector:
 
 activation_cache:
   path: results/smoke_layer6_generic_activations.pt
-  dataset_name: wikitext
+  dataset_name: Salesforce/wikitext
   dataset_config: wikitext-2-raw-v1
   split: train
   text_field: text
@@ -22,6 +22,7 @@ activation_cache:
   token_stride: 2
   val_fraction: 0.10
   seed: 1234
+  streaming: true
 
 training:
   device: auto
