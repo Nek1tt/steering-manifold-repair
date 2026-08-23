@@ -1,0 +1,6 @@
+method,fluency_at_concept_80,fluency_at_concept_85,fluency_at_concept_90,fluency_at_concept_95
+additive,94.726824,70.785004,66.461688,
+gaussian_dpar_b025,89.533413,79.164238,55.163742,48.840709
+gaussian_dpar_b100,89.468503,75.026785,71.450090,
+gaussian_vanilla_b025,89.105859,81.061299,47.654458,
+gaussian_vanilla_b100,80.903138,75.736202,52.601298,
