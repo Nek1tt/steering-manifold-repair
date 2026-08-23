@@ -25,6 +25,7 @@ def main() -> None:
     run(*cache_cmd)
     run(sys.executable, "scripts/train_denoiser.py", "--config", args.config, "--kind", "gaussian")
     run(sys.executable, "scripts/train_denoiser.py", "--config", args.config, "--kind", "mixed")
+    run(sys.executable, "scripts/eval_denoiser_reconstruction.py", "--config", args.config)
     run(sys.executable, "scripts/eval_repairs.py", "--config", args.config)
     run(sys.executable, "scripts/plot_repairs.py", "--config", args.config)
     print("\nRepair suite completed.")
