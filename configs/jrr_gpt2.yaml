@@ -30,9 +30,9 @@ jrr:
     fallback_to_finite_difference: true
     finite_difference_epsilon: 0.01
 
-    # Before the scientific diagnostic, compare the primary Jv estimate with an
-    # independent central finite difference on a real GPT-2 prompt. This catches
-    # hook/autograd incompatibilities and numerically unstable finite differences.
+    # До научной диагностики основной Jv сравнивается с независимой центральной
+    # конечной разностью на реальном GPT-2 prompt. Это ловит несовместимости
+    # hooks/autograd и численно нестабильные finite differences.
     preflight_check_epsilon: 0.02
     preflight_min_jvp_cosine: 0.98
     preflight_max_jvp_relative_error: 0.15
@@ -51,12 +51,10 @@ jrr:
     concept_thresholds: [80, 85, 90]
     gate_min_fluency_gain: 2.0
 
-    # Calibration deliberately mirrors the Stage-A behavior probe. The first
-    # oracle calibration used only 6 prompts, 24 generated tokens and a coarse
-    # alpha grid; under that sampling regime even the additive control never
-    # reached the frozen C80/C85/C90 thresholds, so the gate returned all-NaN
-    # frontiers and could not test JRR. This alignment is a protocol correction,
-    # not method tuning: target layer, beta, methods and thresholds stay frozen.
+    # Финальный calibration специально совпадает с Stage-A behavior probe.
+    # Первый короткий run не достигал даже frozen C80/C85/C90 у additive control,
+    # поэтому не мог проверить JRR. Это исправление протокола, а не tuning:
+    # target layer, beta, methods и thresholds остаются замороженными.
     calibration:
       prompts_path: data/calibration_prompts.txt
       max_prompts: 8
