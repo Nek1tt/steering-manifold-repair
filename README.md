@@ -1,43 +1,114 @@
 # Steering Manifold Repair
 
-Research scaffold for the interpretability task: first reproduce a valid activation-steering concept/fluency Pareto frontier, then study cheap ways to repair the fluency degradation.
+Research project for the interpretability task: reproduce activation-steering degradation, then test cheap learned and geometric ways to push the concept/fluency Pareto frontier up and to the right.
 
-## Current status
+## Status
 
-The first SAE-feature reproduction attempt is preserved as a **failed baseline-vector validation** in:
+The required additive steering baseline has been reproduced successfully on GPT-2 Small at the midpoint layer.
+
+The first SAE-feature attempt is preserved as a negative result in:
 
 ```text
 experiments/failed_sae_profanity/
 ```
 
-That run strongly changed GPT-2 behavior but never increased the intended generated-text concept, so it is not used as the control experiment.
+The successful control experiment is preserved in:
 
-The active reproduction baseline is now a **persona-style contrastive sentiment direction** on GPT-2 Small at the midpoint layer:
+```text
+experiments/successful_sentiment_baseline/
+```
+
+It uses a persona-style contrastive sentiment direction
 
 \[
-v = \mathbb{E}[h\mid\text{positive}] - \mathbb{E}[h\mid\text{negative}],
+v = \mathbb{E}[h\mid\text{positive}] - \mathbb{E}[h\mid\text{negative}]
 \]
 
-followed by the literal steering intervention
+at `blocks.6.hook_resid_post`, with literal response-token steering
 
 \[
 h' = h + \alpha v.
 \]
 
-This is deliberately close to the task's recommended Persona Vectors evaluation philosophy while staying small, local, and fast.
+The frozen baseline produced the expected trade-off: positive-sentiment concept score rises from about 28 to above 90 while stronger steering eventually collapses fluency. The main comparison region for repair methods is `alpha=0.5..4.0`.
 
-## Active baseline
+## New research stage: repair hypotheses
 
-- LM: GPT-2 Small (`gpt2`)
-- Intervention point: `blocks.6.hook_resid_post`
-- Direction: mean activation difference from 30 matched positive/negative sentences
-- Direction extraction: mean of the final 4 token activations for each sentence
-- Steering positions: response/current token only during autoregressive generation
-- Strength mode: literal `h + alpha * v`
-- Concept judge: local `distilbert-base-uncased-finetuned-sst-2-english`
-- Concept score: mean probability of **positive sentiment**, 0-100
-- Fluency diagnostics: clean GPT-2 NLL, distinct-1/2/3, 3-gram repetition
-- Pareto x-axis: a baseline-anchored composite of clean-NLL, distinct-3, and anti-repetition so degenerate low-diversity generations cannot look artificially fluent merely because their NLL decreases
+The repository now implements the assignment-proposed denoiser plus two extensions intended to test something genuinely new.
+
+### B2 — Gaussian activation denoiser
+
+Train a small residual MLP on generic natural layer-6 activations only:
+
+\[
+\tilde h = h + \delta,\qquad D_\theta(\tilde h, r)\approx h,
+\]
+
+where corruption magnitude is parameterized by
+
+\[
+r = \|\delta\|/\|h\|.
+\]
+
+The network is conditioned on `r`, so one checkpoint can handle weak through severe steering.
+
+### M1 — Direction-Preserving Activation Repair (DPAR)
+
+For a steered activation `z = h + alpha*v`, let the denoiser propose
+
+\[
+\Delta = D(z)-z.
+\]
+
+A vanilla denoiser may recover fluency by simply cancelling the intended direction. DPAR removes the correction parallel to the steering vector:
+
+\[
+\Delta_\perp = \Delta - \operatorname{proj}_v(\Delta),
+\]
+
+\[
+h_{\mathrm{DPAR}} = z + \Delta_\perp.
+\]
+
+This preserves the requested steering component by construction while still allowing orthogonal manifold repair.
+
+### M2 — Structured corruption training
+
+Steering perturbations are directional rather than isotropic. A second denoiser is therefore trained on a 50/50 mixture of:
+
+- isotropic Gaussian directions;
+- normalized random natural activation differences `h_j - h_k`.
+
+The held-out sentiment steering direction is never used in denoiser training.
+
+## Methods evaluated
+
+The frozen suite compares:
+
+```text
+additive
+norm_preserving
+gaussian
+gaussian_lambda05
+gaussian_dpar
+mixed
+mixed_dpar
+```
+
+`gaussian_lambda05` is a partial direction-preservation ablation. `mixed_dpar` is the full structured-corruption + DPAR candidate method.
+
+## Mechanistic analysis
+
+The repair evaluator records more than final text scores. For every learned intervention it measures:
+
+- requested vs effective alpha after repair;
+- cosine between the denoiser correction and steering vector;
+- fraction of correction norm parallel to the steering vector;
+- correction norm relative to the steering perturbation;
+- clean-model NLL, distinct-1/2/3 and 3-gram repetition;
+- independent local sentiment concept score.
+
+This directly tests whether a method actually repairs off-manifold damage or only weakens steering.
 
 ## Installation
 
@@ -46,29 +117,14 @@ pip install -r requirements.txt
 pip install -e .
 ```
 
-A Hugging Face token is optional but recommended in Colab to avoid anonymous download rate limits.
+A Hugging Face token is optional but recommended in Colab for higher download limits.
 
-## 1. Validate the direction first
-
-Do **not** run the full sweep until this passes:
+## Reproduce the successful additive baseline
 
 ```bash
 python scripts/validate_sentiment_baseline.py \
   --config configs/baseline_sentiment_gpt2.yaml
-```
 
-The validator:
-
-1. extracts the positive-minus-negative direction at layer 6;
-2. checks that positive examples project higher than negative examples;
-3. uses held-out calibration prompts to choose the causal sign if necessary;
-4. sweeps alpha on those calibration prompts;
-5. requires a measurable increase in independent text-level sentiment score;
-6. saves the calibrated direction to `results/sentiment_direction.pt`.
-
-## 2. Run the full baseline
-
-```bash
 python scripts/run_sentiment_baseline.py \
   --config configs/baseline_sentiment_gpt2.yaml
 
@@ -76,62 +132,108 @@ python scripts/plot_sentiment_baseline.py \
   --config configs/baseline_sentiment_gpt2.yaml
 ```
 
-Expected qualitative result: as alpha grows, positive-sentiment score should rise; at sufficiently strong intervention, fluency should degrade. This gives the concept/fluency Pareto curve required before any denoiser or repair method is evaluated.
+Once it has passed, do not retune prompts, seeds, vector data, judge, or the fluency definition.
 
-Outputs:
+## Run the full repair suite
+
+The recommended Colab entry point is:
 
 ```text
-results/sentiment_validation.json
-results/sentiment_direction.pt
-results/sentiment_baseline_samples.csv
-results/sentiment_baseline_pareto.png
+notebooks/repair_experiments_colab.ipynb
 ```
 
-## Why the previous SAE baseline is archived
+Or run everything from the CLI:
 
-The failed OpenAI-SAE profanity run produced concept score `0.0` at every tested alpha while diversity eventually collapsed. This demonstrates that an interpretable SAE feature is not automatically a useful causal steering vector. The full aggregate table and exact configuration are preserved under `experiments/failed_sae_profanity/` rather than discarded.
+```bash
+python scripts/run_repair_suite.py \
+  --config configs/repair_suite_gpt2.yaml
+```
+
+The full runner performs:
+
+1. cache up to 80k generic WikiText-2 layer-6 activations;
+2. train the Gaussian denoiser;
+3. train the mixed structured denoiser;
+4. evaluate all additive / learned / DPAR methods on the frozen sentiment baseline;
+5. build Pareto and mechanistic plots;
+6. write a descriptive hypothesis report.
+
+Individual stages can be run separately:
+
+```bash
+python scripts/cache_activations.py --config configs/repair_suite_gpt2.yaml
+python scripts/train_denoiser.py --config configs/repair_suite_gpt2.yaml --kind gaussian
+python scripts/train_denoiser.py --config configs/repair_suite_gpt2.yaml --kind mixed
+python scripts/eval_repairs.py --config configs/repair_suite_gpt2.yaml
+python scripts/plot_repairs.py --config configs/repair_suite_gpt2.yaml
+```
+
+## Important outputs
+
+```text
+results/layer6_generic_activations.pt
+checkpoints/denoiser_gaussian.pt
+checkpoints/denoiser_mixed.pt
+results/repair_suite_samples.csv
+results/repair_suite/repair_pareto.png
+results/repair_suite/effective_alpha.png
+results/repair_suite/correction_geometry.png
+results/repair_suite/frontier_summary.csv
+results/repair_suite/hypothesis_report.md
+```
+
+Generated caches, checkpoints and raw results are gitignored. The best final adapter/checkpoint should later be uploaded to Hugging Face as required by the assignment.
 
 ## Repository layout
 
 ```text
 configs/
-  baseline_sentiment_gpt2.yaml    active reproduction baseline
-  baseline_gpt2.yaml              legacy SAE experiment config
+  baseline_sentiment_gpt2.yaml
+  repair_suite_gpt2.yaml
 
 data/
-  sentiment_positive.txt          direction construction data
+  sentiment_positive.txt
   sentiment_negative.txt
-  calibration_prompts.txt         held-out vector calibration prompts
-  prompts.txt                     full evaluation prompts
+  calibration_prompts.txt
+  prompts.txt
 
 experiments/
-  failed_sae_profanity/           archived negative reproduction result
+  failed_sae_profanity/
+  successful_sentiment_baseline/
+  repair_suite/
+
+notebooks/
+  baseline_colab.ipynb
+  repair_experiments_colab.ipynb
 
 scripts/
   validate_sentiment_baseline.py
   run_sentiment_baseline.py
   plot_sentiment_baseline.py
-  validate_baseline.py             legacy SAE validator
-  run_baseline.py                  legacy SAE runner
-  plot_baseline.py                 legacy SAE plotter
+  cache_activations.py
+  train_denoiser.py
+  eval_repairs.py
+  plot_repairs.py
+  run_repair_suite.py
 
 src/steering_repair/
-  steering.py                     activation hooks / repair interface
-  generation.py                   cached autoregressive generation
-  sentiment_baseline.py           contrastive-vector baseline pipeline
-  sae.py                           OpenAI SAE compatibility reader
-  metrics.py                      text and likelihood metrics
-
-tests/
+  sentiment_baseline.py
+  activation_cache.py
+  denoiser.py
+  train_denoiser.py
+  repair_experiment.py
+  steering.py
+  generation.py
+  metrics.py
 ```
 
-## Reproducibility rules for later repair experiments
+## Reproducibility rules
 
-- Freeze the active baseline prompts, seeds, direction-construction data, and judge before comparing repair methods.
-- Train future denoisers without using the held-out validation steering directions.
-- Compare any repair method against a smaller steering coefficient; otherwise a denoiser can appear successful simply by cancelling the intervention.
-- Keep text-level concept metrics separate from mechanistic activation diagnostics.
-- Do not move to repair experiments until the additive baseline itself visibly reproduces the required trade-off.
+- Keep the successful additive baseline frozen for all repair comparisons.
+- Never expose the held-out evaluation steering vector to denoiser training.
+- Compare methods by Pareto frontier, not by the same raw alpha only.
+- Always compare a repaired point with smaller-alpha additive steering so cancellation cannot masquerade as repair.
+- Preserve negative results and ablations.
 
 ## References
 
