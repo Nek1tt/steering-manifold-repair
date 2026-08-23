@@ -34,17 +34,35 @@ $$
 
 ### Concept score
 
-Concept strength измеряется независимым локальным классификатором
-`distilbert-base-uncased-finetuned-sst-2-english` как вероятность positive sentiment.
+Concept strength измеряется независимым локальным классификатором `distilbert-base-uncased-finetuned-sst-2-english`. В таблицах используется шкала 0–100:
 
-### Fluency
+$$
+C = 100\,p(\text{positive}\mid\text{continuation}).
+$$
 
-Используются несколько независимых диагностик:
+Классификатор не участвует в построении steering direction или обучении denoiser.
 
-- NLL продолжения под clean GPT-2;
-- `distinct-1/2/3`;
-- повторяемость 3-грамм;
-- агрегированный fluency score, нормированный относительно `alpha=0`.
+### Fluency score
+
+Отдельно сохраняются NLL продолжения под clean GPT-2, `distinct-1/2/3` и повторяемость 3-грамм. Для Pareto-сравнения используется один агрегированный score, общий для всех методов. Пусть `NLL_0`, `d_{3,0}` и `r_{3,0}` — значения additive control при `alpha=0`, а `d_3` и `r_3` — `distinct-3` и доля повторяющихся 3-грамм текущей точки. Тогда
+
+$$
+q_{NLL} = \exp(-\max(0,NLL-NLL_0)),\qquad q_D = \min(1,d_3/d_{3,0}),\qquad q_R = \min(1,(1-r_3)/(1-r_{3,0})).
+$$
+
+Итоговый fluency score:
+
+$$
+F = 100\,q_{NLL}q_Dq_R.
+$$
+
+Каждый множитель ограничен сверху единицей: случайное улучшение одной диагностики относительно clean anchor не может компенсировать деградацию другой. `distinct-1/2` остаются дополнительными диагностическими метриками и в агрегированный `F` не входят.
+
+### Pareto-метрика F@C
+
+`F@Cτ` означает **максимальную fluency, достижимую при concept score не ниже порога `τ`**. Для dense follow-up сначала усредняются метрики по frozen prompts/seeds отдельно для каждого `alpha`, затем между соседними `alpha` добавляются линейные пересечения порога concept. Поэтому, например, `F@C90` — лучшая fluency на интерполированной aggregate curve при `C >= 90`, а не score в заранее выбранной точке `alpha`.
+
+Это определение важно для coarse-grid эффекта: метод с более плотным расположением точек около порога не должен получать преимущество только из-за дискретизации `alpha`.
 
 Для сравнения методов основным объектом остаётся Pareto frontier, а не качество в одной произвольно выбранной точке `alpha`.
 
@@ -163,7 +181,7 @@ $$
 h_{out}=z+\beta\,\Delta_{filtered}.
 $$
 
-Gaussian denoiser был заново обучен в fresh runtime. История обучения совпала с исходной **точно на каждой эпохе**, а финальное validation improvement снова составило **67.8%** (`val_denoised_mse = 2.822651`). Это сильная проверка воспроизводимости training pipeline.
+В runtime этого эксперимента Gaussian denoiser был заново обучен с seed `2026` и **точно воспроизвёл** архивированную training history на всех пяти эпохах: final validation improvement снова составил **67.8%** (`val_denoised_mse = 2.822651`). Позднее отдельная clean-room проверка из нового Windows clone на другой CUDA/PyTorch сборке получила `val_denoised_mse = 2.925425` (отличие **3.64%**) и improvement `68.1768%` против архивных `67.8113%` (**+0.366 percentage points**). Таким образом, точное совпадение относится к исходному fresh-runtime rerun, а переносимость между окружениями подтверждается отдельным tolerance-based check; детали приведены в [`REPRODUCIBILITY.md`](../REPRODUCIBILITY.md).
 
 Calibration выбирает `beta=0.25` и для DPAR, и для vanilla, но dense held-out sweep показывает, что оптимальный масштаб зависит от concept region.
 
@@ -177,9 +195,11 @@ Interpolated held-out frontier:
 | vanilla `beta=0.25` | 89.11 | **81.06** | 47.65 | — |
 | vanilla `beta=1.00` | 80.90 | 75.74 | 52.60 | — |
 
-Главный practical результат: `F@C90 = 71.45` для DPAR против `66.46` для additive, то есть **+4.99 fluency points**.
+Главный practical результат: `F@C90 = 71.45` для DPAR против `66.46` для additive, то есть **+4.99 fluency points** на aggregate interpolated frontier.
 
-На обоих frozen seeds направление эффекта на C90 совпадает: `+10.53` и `+20.71`, но concept judge заметно шумный и немонотонный, поэтому это **descriptive local evidence**, а не доказательство универсального доминирования.
+На обоих frozen seeds направление эффекта на C90 совпадает: `+10.53` и `+20.71`. Эти две seed-wise разницы не обязаны усредняться в `+4.99`: aggregate frontier строится после усреднения метрик по seeds в каждой точке `alpha`, а затем выполняются thresholding и interpolation; seed-wise frontier, напротив, строится отдельно для каждого seed. Операции «усреднить кривые» и «взять максимум fluency при пересечении concept threshold» нелинейны и не коммутируют. Поэтому aggregate `F@C90` является основным заранее выбранным summary, а per-seed значения используются как robustness diagnostic направления эффекта.
+
+Concept judge заметно шумный и немонотонный, поэтому этот результат остаётся **descriptive local evidence**, а не доказательством универсального доминирования.
 
 Важно: в первом coarse grid казалось, что выигрыш DPAR равен `+7.69`. После плотной интерполяции этот эффект уменьшается до `+4.99`; в финальной работе используется именно более консервативная оценка.
 
@@ -370,6 +390,7 @@ go_to_new_heldout = false
 - Проверена только GPT-2 Small.
 - Основной валидированный concept — positive sentiment; generalization на другие steering directions не доказана.
 - Sentiment classifier даёт шумный, немонотонный по `alpha` score, поэтому небольшие frontier differences нельзя переинтерпретировать как статистически строгие universal wins.
+- Fluency score — составная proxy-метрика, а `F@Cτ` использует линейную интерполяцию между соседними `alpha`; поэтому основные claims дополнительно проверяются через NLL, seed-wise diagnostics и mechanistic quantities, а не только через один aggregate score.
 - JRR и KL-JRR вычислительно дороги и используются как causal oracle/diagnostic, а не deployment method.
 - DPAR гарантирует сохранение projection вдоль `v`, но не гарантирует сохранение всей нелинейной семантики модели.
 - Bootstrap для JRR был сделан post-hoc и используется только как описательная устойчивость NLL-сигнала.
@@ -383,7 +404,7 @@ go_to_new_heldout = false
 - notebooks для каждого основного этапа;
 - компактные CSV с ключевыми aggregate/frontier результатами;
 - negative experiments;
-- exact Gaussian training history.
+- archived Gaussian training history и автоматическая tolerant cross-environment сверка.
 
 Основные notebooks:
 
@@ -394,6 +415,8 @@ notebooks/retrain_gaussian_followups_fresh_colab.ipynb
 notebooks/jrr_experiment_colab.ipynb
 notebooks/selective_jrr_experiment_colab.ipynb
 ```
+
+Отдельный clean-room запуск из нового clone успешно прошёл unit tests, real-model preflights и fresh Gaussian retrain. Его reconstruction quality отличается от архивного run на **3.64%** по final `val_denoised_mse`, а relative improvement — на **0.366 percentage points**. Это различие ожидаемо между CUDA/PyTorch builds и укладывается в заранее сформулированные устойчивые критерии проверки; полный протокол и причины, по которым stochastic `val_noisy_mse` не используется как fail-критерий, описаны в [`REPRODUCIBILITY.md`](../REPRODUCIBILITY.md).
 
 Лучший practical learned checkpoint опубликован открыто:
 
