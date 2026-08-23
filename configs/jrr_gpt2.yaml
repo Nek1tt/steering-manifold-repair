@@ -19,7 +19,7 @@ jrr:
   diagnostic:
     prompts_path: data/calibration_prompts.txt
     max_prompts: 8
-    strengths: [0.0, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0, 2.25, 2.5, 3.0]
+    strengths: [0.0, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0, 2.25, 2.5, 3.0, 4.0]
     target_hooks:
       - blocks.7.hook_resid_post
       - blocks.8.hook_resid_post
