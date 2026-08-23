@@ -36,7 +36,7 @@ $$
 h' = h + \alpha v.
 $$
 
-Concept score — вероятность positive sentiment по независимому локальному SST-2 classifier. Fluency score объединяет clean-model NLL, `distinct-3` и штраф за повторение 3-грамм, нормированный относительно `alpha=0`.
+Concept score — `100 × p(positive)` по независимому локальному SST-2 classifier. Fluency score объединяет clean-model NLL, `distinct-3` и штраф за повторение 3-грамм, нормированный относительно additive `alpha=0`; точная формула приведена в [финальном отчёте](report/README.md). `F@Cτ` означает максимальную fluency на интерполированной aggregate curve при concept score не ниже `τ`.
 
 Baseline воспроизводит требуемый trade-off: concept растёт примерно с `27.9` до `95+`, а fluency при сильном steering падает со `100` до значений порядка `18` и ниже.
 
@@ -49,7 +49,7 @@ Baseline воспроизводит требуемый trade-off: concept рас
 | [`failed_sae_profanity`](experiments/failed_sae_profanity/) | первая проверка SAE-вектора | отрицательный контроль: concept не изменился |
 | [`successful_sentiment_baseline`](experiments/successful_sentiment_baseline/) | валидированный additive baseline | требуемый Pareto trade-off воспроизведён |
 | [`repair_suite`](experiments/repair_suite/) | Gaussian denoiser, DPAR, structured corruption | найдено steering cancellation; structured corruption не помог |
-| [`retrained_gaussian_followups`](experiments/retrained_gaussian_followups/) | свежий retrain + dense sweep | детерминированный retrain; локальный DPAR-выигрыш `+4.99` на C90 |
+| [`retrained_gaussian_followups`](experiments/retrained_gaussian_followups/) | fresh retrain + dense sweep | локальный DPAR-выигрыш `+4.99` на C90; отдельный clean-room retrain подтверждает переносимость |
 | [`jacobian_residual_repair`](experiments/jacobian_residual_repair/) | новая гипотеза о downstream-нелинейности | сильный mechanistic result; практический oracle-эффект неоднороден |
 | [`selective_jrr`](experiments/selective_jrr/) | selective repair нелинейного остатка | частично положительный механизм; strong-regime gate не пройден |
 
@@ -69,6 +69,8 @@ pip install -e .
 ```bash
 pytest -q
 ```
+
+Независимая проверка из отдельного Windows clone успешно прошла unit tests, real-model preflights, восстановление steering direction и fresh Gaussian retrain. Финальный `val_denoised_mse` clean-room run отличается от архивного на **3.64%**, а relative improvement — на **0.366 percentage points**; автоматический tolerance-based checker завершился `PASS`.
 
 Основные notebooks, по одному на этап:
 
@@ -103,6 +105,7 @@ DPAR — это inference-time геометрия поверх этого checkp
 - Основная модель — GPT-2 Small.
 - Основной валидированный steering-вектор — sentiment/persona-style direction.
 - Sentiment judge шумный и немонотонный по `alpha`, поэтому Pareto-результаты интерпретируются локально и с оговорками.
+- Fluency и `F@Cτ` — составные/интерполированные proxy-метрики, поэтому mechanistic claims дополнительно опираются на NLL, seed-wise и activation-space diagnostics.
 - JRR и KL-JRR — дорогие oracle/diagnostic методы для причинного анализа, а не готовые deployment-алгоритмы.
 - Работа не заявляет универсального доминирования additive steering; основной вклад — сочетание практического DPAR-результата и механистического анализа причин деградации.
 
