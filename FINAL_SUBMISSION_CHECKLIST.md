@@ -14,49 +14,31 @@ Use this checklist for the final hours before submission. Do not open new resear
 
 The best practical learned checkpoint is the deterministically reproduced Gaussian activation denoiser used with DPAR.
 
-Find the checkpoint file locally. Expected filename:
+**Published:** https://huggingface.co/Nek1tt/steering-repair-gpt2
+
+Uploaded artifact set:
 
 ```text
 retrained_denoiser_gaussian.pt
+README.md
+checkpoint_metadata.json
+training_config.yaml
+training_history.json
 ```
 
-If necessary search from repository root in PowerShell:
-
-```powershell
-Get-ChildItem -Path . -Recurse -Filter retrained_denoiser_gaussian.pt
-```
-
-Authenticate to Hugging Face:
-
-```powershell
-.\.venv\Scripts\python.exe -m pip install -U huggingface_hub
-.\.venv\Scripts\hf.exe auth login
-```
-
-Then publish, replacing the checkpoint path and repo id:
-
-```powershell
-.\.venv\Scripts\python.exe scripts\publish_best_checkpoint_hf.py `
-  --checkpoint "C:\path\to\retrained_denoiser_gaussian.pt" `
-  --repo-id "Nek1tt/steering-repair-gpt2"
-```
-
-Do **not** pass `--private`: the assignment asks for an open repository.
-
-After upload:
-
-- [ ] Open the Hugging Face URL in an incognito/private browser window.
-- [ ] Confirm `retrained_denoiser_gaussian.pt`, `README.md`, `checkpoint_metadata.json`, `training_config.yaml`, and `training_history.json` are visible.
-- [ ] Add the public Hugging Face URL to root `README.md` and `FINAL_RESULTS.md`.
+- [x] Checkpoint uploaded to a public Hugging Face model repository.
+- [x] Public Hugging Face URL added to root `README.md` and `FINAL_RESULTS.md`.
+- [ ] Open the Hugging Face URL in an incognito/private browser window and confirm it is visible without login.
+- [ ] Confirm all five files above are visible.
 
 ## 3. Repository hygiene
 
-- [ ] Root `README.md` gives a short project overview and links `FINAL_RESULTS.md`.
-- [ ] `FINAL_RESULTS.md` clearly separates practical result from mechanistic oracle experiments.
-- [ ] No claims of universal domination.
-- [ ] Failed/negative experiments remain visible rather than deleted.
-- [ ] Fresh Experiment-008 held-out remains unopened because calibration gate failed.
-- [ ] `git status` is clean locally after final push.
+- [x] Root `README.md` gives a short project overview and links `FINAL_RESULTS.md`.
+- [x] `FINAL_RESULTS.md` clearly separates practical result from mechanistic oracle experiments.
+- [x] No claims of universal domination.
+- [x] Failed/negative experiments remain visible rather than deleted.
+- [x] Fresh Experiment-008 held-out remains unopened because calibration gate failed.
+- [ ] `git status` is clean locally after final pull.
 
 ## 4. Smoke tests
 
@@ -94,4 +76,4 @@ This structure emphasizes the assignment criterion that a strong method is only 
 - forcing the untouched held-out after a failed gate;
 - another model family;
 - large architecture changes;
-- cosmetic plots before the HF checkpoint and report links are complete.
+- cosmetic plots before the report links and final smoke tests are complete.
