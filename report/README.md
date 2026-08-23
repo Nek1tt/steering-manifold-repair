@@ -106,10 +106,12 @@ $$
 
 Denoiser может улучшить fluency самым тривиальным способом — направить `Delta` против `v` и частично отменить steering. Тогда apparent repair не является repair при сопоставимой силе концепта.
 
-DPAR разлагает поправку:
+DPAR разлагает поправку явно:
 
 $$
-\Delta_\parallel = \operatorname{proj}_v(\Delta),
+\Delta_\parallel
+=
+\frac{\langle \Delta,v\rangle}{\langle v,v\rangle}v,
 \qquad
 \Delta_\perp = \Delta - \Delta_\parallel,
 $$
@@ -299,7 +301,10 @@ $$
 затем gradient защищается от изменения first-order steering:
 
 $$
-g_\perp=g-\operatorname{proj}_{Jv}(g),
+g_\perp
+=
+g-
+\frac{\langle g,Jv\rangle}{\langle Jv,Jv\rangle}Jv,
 $$
 
 и удаляется только положительная projection `R_orth` на `g_perp`.
