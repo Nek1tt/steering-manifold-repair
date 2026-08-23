@@ -29,17 +29,17 @@ $$
 
 | диагностика | значение |
 |---|---:|
-| log-log slope `||R_alpha||` vs `alpha` | **1.9849** |
+| log-log slope нормы `R_alpha` vs `alpha` | **1.9849** |
 | mean orthogonal fraction | **0.9404** |
-| rank corr `||R_orth||` vs NLL | +0.8909 |
-| rank corr `||R_orth||` vs fluency | -0.8909 |
+| rank corr нормы `R_orth` vs NLL | +0.8909 |
+| rank corr нормы `R_orth` vs fluency | -0.8909 |
 | JVP | autograd |
 
 Slope практически совпадает с `O(alpha^2)`. Correlation values сами по себе не являются causal evidence: `alpha` одновременно увеличивает и residual norm, и degradation. Поэтому решающим является oracle intervention.
 
 ### Масштаб нелинейности
 
-| `alpha` | `||R||` | `||R_orth||` | `||Jv||` | `||R|| / ||alpha Jv||` |
+| `alpha` | R norm | R_orth norm | Jv norm | R / (alpha Jv) |
 |---:|---:|---:|---:|---:|
 | 1.00 | 3.77 | 3.60 | 13.63 | 0.276 |
 | 1.50 | 8.40 | 8.05 | 13.67 | 0.409 |
