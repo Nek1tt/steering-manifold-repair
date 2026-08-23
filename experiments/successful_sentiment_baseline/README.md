@@ -6,15 +6,15 @@
 
 Для GPT-2 Small строится midpoint contrastive direction:
 
-\[
+$$
 v = \mathbb{E}[h\mid\text{positive}] - \mathbb{E}[h\mid\text{negative}].
-\]
+$$
 
 Intervention применяется в `blocks.6.hook_resid_post`:
 
-\[
+$$
 h' = h + \alpha v.
-\]
+$$
 
 Concept strength измеряется независимо от построения вектора с помощью `distilbert-base-uncased-finetuned-sst-2-english`. Fluency объединяет clean-model NLL, `distinct-3` и anti-repetition относительно unsteered generation.
 
