@@ -44,15 +44,18 @@ vanilla Gaussian correction всё сильнее направляется пр�
 - vanilla Gaussian: **0.4354**;
 - Gaussian DPAR: **≈5.2e-8**.
 
-DPAR использует
+DPAR использует явное ортогональное разложение:
 
 $$
-\Delta_\perp=\Delta-\operatorname{proj}_v(\Delta),
+\Delta_\perp
+=
+\Delta-
+\frac{\langle \Delta,v\rangle}{\langle v,v\rangle}v,
 \qquad
-h_{out}=z+\Delta_\perp,
+h_{out}=z+\Delta_\perp.
 $$
 
-и тем самым устраняет steering-cancellation confound по построению. Поправка при этом остаётся существенной: DPAR не превращается в identity.
+Тем самым steering-cancellation confound устраняется по построению. Поправка при этом остаётся существенной: DPAR не превращается в identity.
 
 ## Discrete frontier
 
