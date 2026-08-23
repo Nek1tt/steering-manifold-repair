@@ -30,7 +30,7 @@ Authenticate to Hugging Face:
 
 ```powershell
 .\.venv\Scripts\python.exe -m pip install -U huggingface_hub
-.\.venv\Scripts\huggingface-cli.exe login
+.\.venv\Scripts\hf.exe auth login
 ```
 
 Then publish, replacing the checkpoint path and repo id:
