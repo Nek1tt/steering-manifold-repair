@@ -9,4 +9,8 @@ __all__ = [
     "experiment",
     "plotting",
     "sentiment_baseline",
+    "activation_cache",
+    "denoiser",
+    "train_denoiser",
+    "repair_experiment",
 ]
