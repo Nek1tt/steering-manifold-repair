@@ -52,9 +52,9 @@ judge:
 followup:
   output_dir: results/retrained_inference_followups
 
-  # We intentionally retrain only the Gaussian denoiser. The previous mixed/
-  # structured model failed to improve the downstream Pareto frontier, so under
-  # the time constraint it is not worth reproducing before this decisive test.
+  # Намеренно переобучается только Gaussian denoiser. Mixed/structured model
+  # не улучшил downstream Pareto frontier, поэтому его повторный retrain не нужен
+  # для этой сфокусированной проверки correction magnitude и DPAR geometry.
   gaussian_vanilla_betas: [0.25, 0.50, 0.75, 1.00]
   gaussian_dpar_betas: [0.10, 0.25, 0.50, 0.75, 1.00]
   mixed_dpar_betas: []
@@ -63,7 +63,7 @@ followup:
 
   calibration:
     prompts_path: data/calibration_prompts.txt
-    # alpha=0 is required as the common fluency anchor used by aggregate_repairs.
+    # alpha=0 нужен как общий fluency anchor для aggregate_repairs.
     strengths: [0.0, 0.75, 1.00, 1.25, 1.50, 1.75, 2.00, 2.25, 2.50, 3.00]
     seeds: [37]
     max_new_tokens: 48
@@ -73,7 +73,7 @@ followup:
 
   evaluation:
     prompts_path: data/prompts.txt
-    # alpha=0 is required as the common fluency anchor used by aggregate_repairs.
+    # alpha=0 нужен как общий fluency anchor для aggregate_repairs.
     strengths: [0.0, 0.75, 1.00, 1.25, 1.50, 1.75, 2.00, 2.25, 2.50, 3.00]
     seeds: [11, 23]
     max_new_tokens: 64
