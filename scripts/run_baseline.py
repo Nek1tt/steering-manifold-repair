@@ -13,7 +13,15 @@ def main() -> None:
     cfg = load_config(args.config)
     df = run_baseline(cfg)
     print("\nSaved:", cfg.experiment.output_csv)
-    print(df.groupby("strength")[["nll", "concept_sae_mean", "quoted_span_rate"]].mean())
+    cols = [
+        "nll",
+        "concept_score",
+        "profanity_rate",
+        "concept_sae_mean",
+        "distinct_3",
+        "repetition_3gram",
+    ]
+    print(df.groupby("strength")[cols].mean().to_string())
 
 
 if __name__ == "__main__":
