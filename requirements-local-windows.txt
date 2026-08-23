@@ -13,3 +13,6 @@ tabulate>=0.9
 
 # Small environment diagnostics used in the local notebook.
 psutil>=6.0
+
+# Final assignment packaging: publish the best checkpoint to Hugging Face.
+huggingface_hub>=0.27
