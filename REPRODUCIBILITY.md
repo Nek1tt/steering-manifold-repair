@@ -1,40 +1,80 @@
-# Проверка воспроизводимости
+# Воспроизводимость
 
-Этот файл описывает, как проверить решение из чистого окружения, не полагаясь на локальные артефакты автора.
+Основной результат можно проверить **без повторного обучения**: опубликованный Gaussian denoiser автоматически загружается с Hugging Face, после чего запускается frozen held-out сравнение additive steering, vanilla denoising и DPAR.
 
-## 1. Чистый clone и окружение
+Публичный checkpoint:
 
-На Windows + NVIDIA GPU:
+https://huggingface.co/Nek1tt/steering-repair-gpt2
 
-```powershell
-git clone https://github.com/Nek1tt/steering-manifold-repair.git steering-repro-check
-cd steering-repro-check
+Исходный код:
 
-py -3.11 -m venv .venv
-.\.venv\Scripts\python.exe -m pip install --upgrade pip setuptools wheel
-.\.venv\Scripts\python.exe -m pip install torch==2.10.0 --index-url https://download.pytorch.org/whl/cu128
-.\.venv\Scripts\python.exe -m pip install -r requirements.txt
-.\.venv\Scripts\python.exe -m pip install -e .
+https://github.com/Nek1tt/steering-manifold-repair
+
+## 1. Установка
+
+Клонируйте репозиторий и создайте отдельное окружение:
+
+```bash
+git clone https://github.com/Nek1tt/steering-manifold-repair.git
+cd steering-manifold-repair
+
+python -m venv .venv
+source .venv/bin/activate
 ```
 
-Проверка GPU:
+Обновите `pip`:
 
-```powershell
-.\.venv\Scripts\python.exe -c "import torch; print(torch.__version__); print(torch.cuda.is_available()); print(torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'CPU')"
+```bash
+python -m pip install --upgrade pip setuptools wheel
 ```
 
-## 2. Быстрый обязательный smoke test
+### CUDA PyTorch
 
-Сначала запускаются все unit tests, включая статическую проверку Markdown:
+Полный generation evaluation и fresh retrain рассчитаны на NVIDIA GPU.
 
-```powershell
-.\.venv\Scripts\python.exe -m pytest -q
+В `requirements.txt` указана общая зависимость `torch>=2.2`, поэтому CUDA-сборку PyTorch нужно установить **до** остальных зависимостей.
+
+Конфигурация, на которой выполнялся clean-room запуск:
+
+```bash
+python -m pip install torch==2.10.0 \
+  --index-url https://download.pytorch.org/whl/cu128
 ```
 
-Затем real-model preflight для основного learned repair pipeline:
+После этого установите зависимости проекта:
 
-```powershell
-.\.venv\Scripts\python.exe scripts\preflight_repair_suite.py --config configs\repair_suite_gpt2.yaml
+```bash
+python -m pip install -r requirements.txt
+python -m pip install -e .
+```
+
+Проверьте, что PyTorch видит GPU:
+
+```bash
+python -c "import torch; print('torch:', torch.__version__); print('cuda:', torch.cuda.is_available()); print('cuda version:', torch.version.cuda); print('device:', torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'CPU')"
+```
+
+Для GPU-запуска ожидается:
+
+```text
+cuda: True
+```
+
+Если используется другая CUDA/PyTorch конфигурация, установите совместимую CUDA-сборку PyTorch вместо приведённой выше.
+
+## 2. Быстрые проверки
+
+Unit tests:
+
+```bash
+python -m pytest -q
+```
+
+Real-model preflight основного repair pipeline:
+
+```bash
+python scripts/preflight_repair_suite.py \
+  --config configs/retrain_gaussian_followups_gpt2.yaml
 ```
 
 Ожидаемая финальная строка:
@@ -43,16 +83,87 @@ py -3.11 -m venv .venv
 REPAIR SUITE PREFLIGHT: PASS
 ```
 
-Этот preflight реально загружает GPT-2 и WikiText, извлекает небольшой activation cache и проверяет правильный hook/размерность.
+Preflight загружает GPT-2 и WikiText, извлекает небольшой activation cache и проверяет используемый TransformerLens hook и размерность residual stream.
 
-## 3. Воспроизведение steering baseline
+## 3. Основной DPAR result с checkpoint из Hugging Face
 
-Baseline полностью строит sentiment direction из файлов `data/sentiment_positive.txt` и `data/sentiment_negative.txt`; готовый steering-вектор не требуется.
+Запустите:
 
-Сначала fail-fast validation строит и сохраняет calibrated direction:
+```bash
+python scripts/run_hf_dpar_evaluation.py
+```
 
-```powershell
-.\.venv\Scripts\python.exe scripts\validate_sentiment_baseline.py --config configs\baseline_sentiment_gpt2.yaml
+Скрипт автоматически:
+
+1. строит `results/sentiment_direction.pt` из `data/sentiment_positive.txt` и `data/sentiment_negative.txt`, если direction ещё отсутствует;
+2. загружает свежую копию `retrained_denoiser_gaussian.pt` из `Nek1tt/steering-repair-gpt2`;
+3. использует frozen held-out prompts, seeds и alpha grid из `configs/retrain_gaussian_followups_gpt2.yaml`;
+4. сравнивает additive steering, vanilla Gaussian denoising (`beta=1`) и full DPAR (`beta=1`);
+5. считает aggregate fluency/concept curves и интерполированный frontier;
+6. проверяет точное сохранение steering projection у DPAR.
+
+Результаты сохраняются в:
+
+```text
+results/hf_dpar_reproduction/samples.csv
+results/hf_dpar_reproduction/aggregate.csv
+results/hf_dpar_reproduction/interpolated_frontier.csv
+```
+
+Frozen evaluation protocol:
+
+```text
+prompts: data/prompts.txt
+seeds: 11, 23
+alpha: 0, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.25, 2.5, 3
+max_new_tokens: 64
+temperature: 0.9
+top_p: 0.95
+```
+
+Reference interpolated frontier:
+
+| Метод | F@C80 | F@C85 | F@C90 |
+|---|---:|---:|---:|
+| Additive | 94.73 | 70.79 | 66.46 |
+| Vanilla Gaussian (`beta=1`) | 80.90 | 75.74 | 52.60 |
+| Full DPAR (`beta=1`) | 89.47 | 75.03 | 71.45 |
+
+Основной reported result:
+
+```text
+DPAR F@C90     = 71.45
+Additive F@C90 = 66.46
+Gain           = +4.99 fluency points
+```
+
+`F@C90` — максимальная fluency на интерполированной aggregate curve при concept score не ниже 90.
+
+Full DPAR `beta=1` входил в held-out method set заранее как mandatory full-repair control и не выбирался по held-out результатам.
+
+Точные generated continuations могут немного меняться между версиями PyTorch, Transformers и CUDA. Поэтому `+4.99` — reference descriptive effect, а не требование битового совпадения generation output.
+
+При этом главный geometric invariant DPAR должен сохраняться с численной точностью:
+
+```text
+|effective alpha - requested alpha| ≈ 0
+```
+
+Скрипт завершает работу ошибкой, если максимальная ошибка сохранения `alpha` превышает `1e-4`.
+
+Reference результаты этого эксперимента:
+
+```text
+experiments/retrained_gaussian_followups/
+```
+
+## 4. Воспроизведение sentiment baseline
+
+Основной DPAR-скрипт сам строит steering direction при необходимости. Baseline можно запустить отдельно:
+
+```bash
+python scripts/validate_sentiment_baseline.py \
+  --config configs/baseline_sentiment_gpt2.yaml
 ```
 
 Ожидаемая финальная строка:
@@ -61,48 +172,64 @@ Baseline полностью строит sentiment direction из файлов `
 SENTIMENT VECTOR VALIDATION: PASS
 ```
 
-После этого запускается полный baseline sweep:
+Полный baseline sweep:
 
-```powershell
-.\.venv\Scripts\python.exe scripts\run_sentiment_baseline.py --config configs\baseline_sentiment_gpt2.yaml
+```bash
+python scripts/run_sentiment_baseline.py \
+  --config configs/baseline_sentiment_gpt2.yaml
 ```
 
-После этих шагов должны появиться:
+Reference results:
 
 ```text
-results/sentiment_direction.pt
-results/sentiment_baseline_samples.csv
+experiments/successful_sentiment_baseline/
 ```
 
-Качественный критерий воспроизведения: positive-sentiment concept заметно растёт с `alpha`, а fluency/NLL деградируют при сильном steering. Архивированная reference-таблица находится в `experiments/successful_sentiment_baseline/aggregate.csv`.
+Качественный результат: positive-sentiment concept растёт с увеличением `alpha`, а strong steering ухудшает NLL и fluency.
 
-## 4. Самая сильная проверка: fresh retrain Gaussian denoiser
+## 5. Воспроизведение обучения Gaussian denoiser
 
-Ключевой обученный checkpoint можно воспроизвести только из кода, конфига и публичных данных.
+Этот раздел не нужен для проверки опубликованного HF checkpoint. Он проверяет отдельно, что learned component можно заново получить из frozen config и публичных данных.
 
-Сначала строится activation cache:
+### 5.1. Activation cache
 
-```powershell
-.\.venv\Scripts\python.exe scripts\cache_activations.py --config configs\retrain_gaussian_followups_gpt2.yaml
+```bash
+python scripts/cache_activations.py \
+  --config configs/retrain_gaussian_followups_gpt2.yaml
 ```
 
-Затем обучается только Gaussian denoiser:
+Используется:
 
-```powershell
-.\.venv\Scripts\python.exe scripts\train_denoiser.py --config configs\retrain_gaussian_followups_gpt2.yaml --kind gaussian
+```text
+base model: GPT-2 Small
+dataset: Salesforce/wikitext
+subset: wikitext-2-raw-v1
+split: train
+hook: blocks.6.hook_resid_post
+max activations: 80,000
+train / validation: 72k / 8k
+seed: 1234
 ```
 
-Ожидаемые выходы:
+Результат:
+
+```text
+results/retrain_layer6_generic_activations.pt
+```
+
+### 5.2. Fresh retrain
+
+```bash
+python scripts/train_denoiser.py \
+  --config configs/retrain_gaussian_followups_gpt2.yaml \
+  --kind gaussian
+```
+
+Результаты:
 
 ```text
 checkpoints/retrained_denoiser_gaussian.pt
 results/retrained_denoiser_gaussian_history.json
-```
-
-Архивированная reference history находится в:
-
-```text
-experiments/retrained_gaussian_followups/retrained_denoiser_gaussian_history.json
 ```
 
 Reference final epoch:
@@ -113,115 +240,149 @@ val_denoised_mse             = 2.8226513367
 val_relative_mse_improvement = 0.6781128742
 ```
 
-Автоматическая сверка:
+Архивированная training history:
 
-```powershell
-.\.venv\Scripts\python.exe scripts\check_reproducibility.py
+```text
+experiments/retrained_gaussian_followups/retrained_denoiser_gaussian_history.json
 ```
 
-Успех:
+### 5.3. Автоматическая сверка retrain
+
+```bash
+python scripts/check_reproducibility.py
+```
+
+Ожидаемая финальная строка:
 
 ```text
 REPRODUCIBILITY CHECK: PASS
 ```
 
-Проверка намеренно не требует битовой идентичности разных GPU/CUDA/PyTorch сборок. Устойчивые критерии следующие:
+Checker не требует битовой идентичности между разными GPU/CUDA/PyTorch environments.
 
-- `train_mse` и `val_denoised_mse` на каждой эпохе должны отличаться от архивированной learning curve не более чем на 5% относительно;
-- `val_relative_mse_improvement` должен отличаться не более чем на 2 percentage points абсолютно;
-- learning curve должна реально улучшаться от первой к последней эпохе;
-- `kind`, `d_model=768`, `hidden_dim=1536` и структура checkpoint проверяются точно;
-- `best_val_mse` checkpoint должен совпадать с лучшей точкой fresh history и быть в пределах 5% от архивированного best value.
+Проверяются:
 
-`val_noisy_mse` выводится как диагностика, но не является fail-критерием. Причина: текущий `evaluate_denoiser()` заново семплирует Gaussian validation corruption после каждой эпохи через torch RNG и не использует отдельный фиксированный validation generator. Поэтому эта величина закономерно сильнее плавает между CUDA/PyTorch builds, чем качество самого обученного denoiser.
+- `train_mse` и `val_denoised_mse` по эпохам с относительным tolerance 5%;
+- `val_relative_mse_improvement` с tolerance 2 percentage points;
+- улучшение learning curve;
+- `kind=gaussian`;
+- `d_model=768`;
+- `hidden_dim=1536`;
+- структура checkpoint;
+- согласованность `best_val_mse` с fresh history.
 
-Контрольный clean-room запуск из отдельного Windows clone воспроизвёл финальный результат:
+`val_noisy_mse` используется только как диагностика: validation Gaussian corruption семплируется заново через PyTorch RNG и поэтому сильнее зависит от runtime.
+
+Контрольный clean-room retrain дал:
 
 ```text
 archived val_denoised_mse = 2.822651
-fresh    val_denoised_mse = 2.925425   (3.64% difference)
+fresh    val_denoised_mse = 2.925425
+difference                = 3.64%
 
 archived improvement = 67.8113%
-fresh    improvement = 68.1768%        (+0.366 percentage points)
+fresh    improvement = 68.1768%
+difference           = +0.366 percentage points
 ```
 
-Максимальное отличие `val_denoised_mse` по пяти эпохам в этом clean-room run составило около 4.10%; максимальный диагностический drift `val_noisy_mse` — около 4.83%.
+Fresh retrain перезаписывает локальный `checkpoints/retrained_denoiser_gaussian.pt`, но не изменяет опубликованный Hugging Face repository.
 
-## 5. Проверка mechanistic методов
+Чтобы прогнать тот же held-out evaluation на fresh checkpoint без повторной загрузки HF weights:
 
-После построения `results/sentiment_direction.pt` можно выполнить дешёвые numerical/real-model preflights:
-
-```powershell
-.\.venv\Scripts\python.exe scripts\preflight_jrr.py --config configs\jrr_gpt2.yaml
-.\.venv\Scripts\python.exe scripts\preflight_selective_jrr.py --config configs\selective_jrr_gpt2.yaml
+```bash
+python scripts/run_hf_dpar_evaluation.py --skip-download
 ```
 
-Ожидаемые финальные строки:
+## 6. JRR
+
+JRR не использует обученный checkpoint.
+
+Preflight:
+
+```bash
+python scripts/preflight_jrr.py \
+  --config configs/jrr_gpt2.yaml
+```
+
+Ожидаемая финальная строка:
 
 ```text
 JRR PREFLIGHT: PASS
+```
+
+Mechanistic diagnostic:
+
+```bash
+python scripts/run_jrr_diagnostic.py \
+  --config configs/jrr_gpt2.yaml
+```
+
+Reference diagnostics:
+
+```text
+log-log slope ||R_alpha|| vs alpha ≈ 1.9849
+mean orthogonal fraction          ≈ 0.9404
+R / (alpha Jv) at alpha=3         ≈ 0.986
+```
+
+Causal oracle:
+
+```bash
+python scripts/run_jrr_oracle.py \
+  --config configs/jrr_gpt2.yaml \
+  --phase calibration
+
+python scripts/run_jrr_oracle.py \
+  --config configs/jrr_gpt2.yaml \
+  --phase evaluation
+```
+
+Полные результаты:
+
+```text
+experiments/jacobian_residual_repair/
+```
+
+## 7. KL-Selective JRR
+
+Preflight:
+
+```bash
+python scripts/preflight_selective_jrr.py \
+  --config configs/selective_jrr_gpt2.yaml
+```
+
+Ожидаемая финальная строка:
+
+```text
 KL-SELECTIVE JRR PREFLIGHT: PASS
 ```
 
-Они проверяют hook semantics, directional JVP и локальную KL-gradient geometry независимо от сохранённых итоговых CSV.
+Frozen calibration:
 
-## 6. Фактический clean-room результат перед сдачей
-
-Отдельный clone на Windows был пройден как внешний проверяющий, без использования старых `results/` и `checkpoints/` автора. Получено:
-
-```text
-pytest                             38 passed
-REPAIR SUITE PREFLIGHT             PASS
-SENTIMENT VECTOR VALIDATION        PASS
-JRR PREFLIGHT                      PASS
-KL-SELECTIVE JRR PREFLIGHT         PASS
-fresh Gaussian retrain             completed
-REPRODUCIBILITY CHECK              PASS
+```bash
+python scripts/run_selective_jrr.py \
+  --config configs/selective_jrr_gpt2.yaml \
+  --phase calibration
 ```
 
-Таким образом, проверены разные уровни воспроизводимости: импортируемость и unit-level invariants, реальные Hugging Face model/data downloads, Transformer hook semantics, построение steering direction из исходных текстовых данных, JVP/KL geometry и повторное обучение основного learned checkpoint.
-
-## 7. Полное воспроизведение результатов
-
-Полные эксперименты существенно дороже smoke test. Для каждого этапа сохранён отдельный notebook:
+В reported experiment strong-steering gate не был пройден:
 
 ```text
-notebooks/baseline_colab.ipynb
-notebooks/repair_experiments_colab.ipynb
-notebooks/retrain_gaussian_followups_fresh_colab.ipynb
-notebooks/jrr_experiment_colab.ipynb
-notebooks/selective_jrr_experiment_colab.ipynb
+go_to_new_heldout = false
 ```
 
-И соответствующие frozen configs в `configs/`.
+Поэтому новый held-out намеренно не запускался. Для воспроизведения reported protocol `--force` использовать не нужно.
 
-Важно: для JRR/KL-JRR calibration/held-out протоколы нельзя менять после просмотра результатов. В частности, Experiment 008 не прошёл заранее заданный calibration gate, поэтому его новый held-out намеренно не запускался.
-
-## 8. Проверка опубликованного checkpoint
-
-Публичный checkpoint:
-
-https://huggingface.co/Nek1tt/steering-repair-gpt2
-
-В репозитории Hugging Face должны быть доступны без авторизации:
+Reference mechanistic result:
 
 ```text
-retrained_denoiser_gaussian.pt
-README.md
-checkpoint_metadata.json
-training_config.yaml
-training_history.json
+mean selected fraction of R_orth = 7.93%
+mean local KL reduction          = 41.6%
 ```
 
-Checkpoint на Hugging Face является тем же типом Gaussian activation denoiser, который воспроизводится в разделе 4; DPAR — inference-time геометрия поверх его correction.
+Полные результаты:
 
-## Минимальный критерий воспроизводимости перед сдачей
-
-Перед отправкой решения достаточно убедиться, что из отдельного чистого clone выполняются четыре пункта:
-
-1. `pytest -q` проходит;
-2. `preflight_repair_suite.py` заканчивается `PASS`;
-3. `validate_sentiment_baseline.py` заканчивается `PASS`, а полный baseline строит expected trade-off;
-4. fresh Gaussian retrain проходит `scripts/check_reproducibility.py`.
-
-Контрольный clean-room запуск выше выполнил эти критерии, а также дополнительные JRR/KL-JRR preflight-проверки. Это проверяет установку, данные, model hooks, обучение, формат checkpoint и основной экспериментальный pipeline независимо от старого рабочего окружения.
+```text
+experiments/selective_jrr/
+```
