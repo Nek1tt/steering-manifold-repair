@@ -1,58 +1,56 @@
-# Experiment 008 — KL-Selective JRR results
+# Experiment 008 — результаты KL-Selective JRR
 
-Date: 2026-08-24
+Дата: 2026-08-24.
 
-## Outcome
+## Итог
 
-The preregistered calibration gate **did not pass**, so the fresh held-out split (`data/selective_jrr_heldout_prompts.txt`, seeds `101/211`) was intentionally not opened.
+Заранее зафиксированный calibration gate **не пройден**, поэтому новый held-out (`data/selective_jrr_heldout_prompts.txt`, seeds `101/211`) намеренно не открывался.
 
-This is a useful partial/negative result rather than a failed implementation. KL-Selective JRR does identify a small KL-increasing component inside the nonlinear remainder and often improves fluency, but the one-dimensional local KL selector is not sufficient to preserve concept reliably in the strongest steering regime.
+Это частично положительный mechanistic result, а не implementation failure. KL-JRR действительно находит небольшую компоненту нелинейного остатка, которая непропорционально сильно отвечает за локальный clean-distribution KL. Но one-dimensional local KL selector недостаточен для устойчивого сохранения concept в extreme steering regime.
 
-## Frozen calibration protocol
+## Frozen calibration
 
-- 8 calibration prompts
-- seed `37`
-- target `blocks.7.hook_resid_post`
-- `beta=1`
-- methods: additive, full JRR, KL-JRR
-- strengths: `0, 1, 1.5, 2, 2.25, 3, 4`
-- gate evaluated only at `alpha={2.25,3,4}`
-- pass condition at one strong-alpha point:
-  - fluency gain versus additive `>= +5`
-  - concept loss versus additive `<= 5`
+- 8 prompts;
+- seed `37`;
+- target `blocks.7.hook_resid_post`;
+- `beta=1`;
+- методы: additive, full JRR, KL-JRR;
+- `alpha = 0, 1, 1.5, 2, 2.25, 3, 4`;
+- gate только на `alpha={2.25,3,4}`;
+- pass: `delta fluency >= +5` и `delta concept >= -5` хотя бы в одной strong point.
 
-No thresholds, layer, beta, prompt, or seed was changed after observing the result.
+Ни threshold, ни layer, ни beta, ни prompts/seeds после просмотра результата не менялись.
 
-## Calibration frontier
+## Frontier на calibration
 
-| method | F@C70 | F@C75 | F@C80 |
+| метод | F@C70 | F@C75 | F@C80 |
 |---|---:|---:|---:|
 | additive | 85.66 | 48.71 | 45.49 |
 | full JRR | **100.00** | **100.00** | **100.00** |
 | KL-JRR | **100.00** | 97.57 | — |
 
-The frontier shows that the selector is promising in the mid-concept regime, but the primary decision criterion was the frozen same-alpha gate, not this interpolated frontier.
+Эта таблица показывает promising mid-concept region, но основным decision criterion был заранее заданный same-alpha gate.
 
 ## Same-alpha result
 
-| alpha | KL-JRR concept | additive concept | delta concept | KL-JRR fluency | additive fluency | delta fluency | delta NLL |
-|---:|---:|---:|---:|---:|---:|---:|---:|
-| 1.00 | 70.15 | 49.74 | **+20.41** | 100.00 | 98.01 | +1.99 | -0.074 |
-| 1.50 | 75.00 | 74.15 | +0.85 | **97.57** | 83.13 | **+14.44** | **-0.151** |
-| 2.00 | 53.36 | 39.36 | **+14.01** | 82.72 | 72.81 | **+9.92** | **-0.128** |
-| 2.25 | 61.12 | 37.01 | **+24.11** | 91.94 | 87.90 | **+4.04** | -0.045 |
-| 3.00 | 18.19 | 53.63 | **-35.45** | 87.88 | 62.48 | **+25.40** | **-0.332** |
-| 4.00 | 51.65 | 83.50 | **-31.85** | 56.45 | 43.24 | **+13.21** | **-0.267** |
+| `alpha` | delta concept | delta fluency | delta NLL |
+|---:|---:|---:|---:|
+| 1.00 | **+20.41** | +1.99 | -0.074 |
+| 1.50 | +0.85 | **+14.44** | **-0.151** |
+| 2.00 | **+14.01** | **+9.92** | **-0.128** |
+| 2.25 | **+24.11** | +4.04 | -0.045 |
+| 3.00 | **-35.45** | **+25.40** | **-0.332** |
+| 4.00 | **-31.85** | **+13.21** | **-0.267** |
 
-The closest strong-regime point was `alpha=2.25`: KL-JRR improved concept substantially and improved fluency by `+4.04`, but this was below the preregistered `+5` fluency gate. The gate therefore correctly remained closed.
+Ближайшая к gate strong point — `alpha=2.25`: concept вырос на `+24.11`, fluency на `+4.04`, но preregistered threshold был `+5`. Ослаблять его post-hoc нельзя.
 
-At `alpha=3` and `4`, KL-JRR strongly improves fluency/NLL but loses large amounts of concept. This reproduces the core JRR lesson in a sharper form: even removing a small KL-sensitive part of the nonlinear response can alter the autoregressive semantic trajectory substantially.
+На `alpha=3/4` fluency/NLL улучшаются сильно, но concept падает на десятки points. Это настоящий extreme-regime failure, а не следствие слишком строгого `+5` threshold.
 
 ## Mechanistic diagnostics
 
-KL-JRR is highly selective. It removes only a small fraction of the full orthogonal nonlinear remainder:
+Selector удаляет лишь малую долю полного `R_orth`:
 
-| alpha | selected fraction of `R_orth` | KL before | KL after | relative KL reduction |
+| `alpha` | selected fraction | KL before | KL after | reduction |
 |---:|---:|---:|---:|---:|
 | 1.00 | 5.17% | 0.0154 | 0.0130 | 15.9% |
 | 1.50 | 6.55% | 0.0381 | 0.0290 | 23.9% |
@@ -61,32 +59,30 @@ KL-JRR is highly selective. It removes only a small fraction of the full orthogo
 | 3.00 | 8.99% | 0.2651 | 0.1503 | 43.3% |
 | 4.00 | 7.73% | 0.5004 | 0.2812 | 43.8% |
 
-Across the three preregistered strong strengths, the selected component averages only **7.93%** of `R_orth`, yet lowers local KL by **41.6%** on average.
+На preregistered strong strengths компонент составляет в среднем лишь **7.93%** `R_orth`, но уменьшает local KL в среднем на **41.6%**.
 
-The numerical protection of the transported first-order direction also worked: `sel_transport_dot_removed` stays at approximately `1e-7` scale.
+`sel_transport_dot_removed` остаётся порядка `1e-7`, то есть first-order transported direction действительно защищён численно.
 
-Therefore the selector is not simply recreating full JRR. It finds a compact mode with a large local effect on clean-distribution KL.
+## Что поддерживается
 
-## Interpretation
+1. Harmful часть nonlinear response имеет структуру: очень маленькая KL-sensitive component объясняет непропорционально большую часть local divergence.
+2. Selective correction может улучшать NLL/fluency без ослабления projection вдоль `Jv`.
+3. Разложение JRR на useful/harmful nonlinear computation содержательно, но one-step KL gradient не является достаточным separator.
 
-### Supported
+## Что не поддерживается
 
-1. **The harmful part of the nonlinear response is structured.** A one-dimensional locally KL-sensitive mode accounts for a disproportionate fraction of the local KL divergence while occupying less than 10% of the full orthogonal remainder norm.
-2. **Selective removal can improve language-model behavior without weakening the transported first-order steering direction.** NLL and fluency improve at several strengths, and the removed component remains numerically orthogonal to `Jv`.
-3. **The useful/harmful decomposition proposed after Experiment 007 is meaningful, but not solved by local KL alone.**
+Не поддержана сильная гипотеза, что один local KL-gradient mode чисто отделяет fluency damage от concept-carrying computation в strong regime.
 
-### Not supported
-
-The strong claim that a single local KL-gradient mode cleanly separates fluency-damaging from concept-carrying nonlinear computation is **not supported**. In the strongest steering regime, concept can collapse even when only a small fraction of `R_orth` is removed.
-
-A likely reason is autoregressive compounding: a locally small next-token correction can choose a different token, after which the subsequent activation trajectory and concept realization diverge. Local KL sensitivity is therefore not equivalent to long-horizon semantic irrelevance.
+Вероятное объяснение — autoregressive compounding: даже небольшая local correction может изменить sampled next token, после чего вся дальнейшая trajectory и realization concept расходятся.
 
 ## Decision
 
-The fresh held-out remains untouched because `go_to_new_heldout=false`.
+```text
+go_to_new_heldout = false
+```
 
-With the submission deadline near, no further post-hoc threshold relaxation or beta/layer sweep should be run. The defensible research story is now stronger if Experiment 008 is retained as a principled negative/partial result:
+Fresh held-out оставлен нетронутым. Это сохраняет честность protocol и не позволяет превращать почти прошедшую точку `alpha=2.25` в post-hoc «победу» изменением threshold.
 
-> Experiment 007 showed that nonlinear steering propagation contains both fluency-damaging and concept-carrying computation. Experiment 008 then showed that a compact KL-sensitive harmful mode exists and can strongly reduce local KL, but local next-token sensitivity alone is insufficient to guarantee long-horizon concept preservation.
+Наиболее точная формулировка:
 
-This motivates future sequence-aware or concept-aware harmful-mode selection, but it should not be tuned further on the current calibration split for the final submission.
+> KL-JRR находит компактный локальный harmful mode и даёт сильные улучшения в moderate regime, но local next-token divergence недостаточна как гарантия long-horizon semantic preservation при extreme activation steering.
