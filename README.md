@@ -54,7 +54,7 @@ pip install -r requirements.txt
 pip install -e .
 ```
 
-The OpenAI SAE package is installed directly from GitHub by `requirements.txt`.
+The OpenAI SAE **weights** are downloaded from the official public blob storage at runtime. We intentionally do not install the historical `openai/sparse_autoencoder` package because its metadata pins `torch==2.1.0`, `transformer_lens==1.9.1`, and `blobfile==2.0.2`, which conflicts with modern Colab environments. A small inference-only compatibility reader lives in `src/steering_repair/sae.py`.
 
 ## Run the baseline
 
