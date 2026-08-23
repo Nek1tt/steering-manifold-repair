@@ -109,11 +109,7 @@ Denoiser может улучшить fluency самым тривиальным �
 DPAR разлагает поправку явно:
 
 $$
-\Delta_\parallel
-=
-\frac{\langle \Delta,v\rangle}{\langle v,v\rangle}v,
-\qquad
-\Delta_\perp = \Delta - \Delta_\parallel,
+\Delta_\parallel = \frac{\langle \Delta,v\rangle}{\langle v,v\rangle}v,\qquad \Delta_\perp = \Delta - \Delta_\parallel.
 $$
 
 и применяет только
@@ -181,13 +177,7 @@ Interpolated held-out frontier:
 | vanilla `beta=0.25` | 89.11 | **81.06** | 47.65 | — |
 | vanilla `beta=1.00` | 80.90 | 75.74 | 52.60 | — |
 
-Главный practical результат:
-
-$$
-F@C90:\quad 71.45\;\text{(DPAR)}\;\;\text{vs}\;\;66.46\;\text{(additive)},
-$$
-
-то есть **+4.99 fluency points**.
+Главный practical результат: `F@C90 = 71.45` для DPAR против `66.46` для additive, то есть **+4.99 fluency points**.
 
 На обоих frozen seeds направление эффекта на C90 совпадает: `+10.53` и `+20.71`, но concept judge заметно шумный и немонотонный, поэтому это **descriptive local evidence**, а не доказательство универсального доминирования.
 
@@ -225,16 +215,16 @@ Calibration выбирает `blocks.7.hook_resid_post`. На этом слое:
 
 | диагностика | значение |
 |---|---:|
-| log-log slope `||R_alpha||` по `alpha` | **1.9849** |
+| log-log slope нормы `R_alpha` по `alpha` | **1.9849** |
 | средняя доля остатка, ортогональная `Jv` | **0.9404** |
-| rank corr `||R_orth||` vs NLL | +0.8909 |
-| rank corr `||R_orth||` vs fluency | -0.8909 |
+| rank corr нормы `R_orth` vs NLL | +0.8909 |
+| rank corr нормы `R_orth` vs fluency | -0.8909 |
 
 Slope практически совпадает с second-order prediction `O(alpha^2)`. Корреляции интерпретируются осторожно, потому что их может частично объяснять общий рост `alpha`; поэтому далее проводится причинный oracle test.
 
 На held-out autoregressive trajectories нелинейность становится очень большой:
 
-| `alpha` | `||R||` | `||R_orth||` | `||Jv||` | `||R|| / ||alpha Jv||` |
+| `alpha` | R norm | R_orth norm | Jv norm | R / (alpha Jv) |
 |---:|---:|---:|---:|---:|
 | 1.0 | 3.77 | 3.60 | 13.63 | 0.276 |
 | 1.5 | 8.40 | 8.05 | 13.67 | 0.409 |
@@ -301,10 +291,7 @@ $$
 затем gradient защищается от изменения first-order steering:
 
 $$
-g_\perp
-=
-g-
-\frac{\langle g,Jv\rangle}{\langle Jv,Jv\rangle}Jv,
+g_\perp = g - \frac{\langle g,Jv\rangle}{\langle Jv,Jv\rangle}Jv.
 $$
 
 и удаляется только положительная projection `R_orth` на `g_perp`.
