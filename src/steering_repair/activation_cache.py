@@ -75,7 +75,11 @@ def cache_layer_activations(
             model.cfg.device
         )
         tokens = tokens[:, : cfg.max_seq_tokens]
-        _, cache = model.run_with_cache(tokens, names_filter=[hook_name])
+        _, cache = model.run_with_cache(
+            tokens,
+            names_filter=[hook_name],
+            return_type=None,
+        )
         acts = cache[hook_name]
 
         for row_idx, length in enumerate(lengths):
