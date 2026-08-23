@@ -58,8 +58,9 @@ def main() -> None:
                 }
             )
     df = pd.DataFrame(rows)
-    out = Path("results/denoiser_cross_reconstruction.csv")
-    out.parent.mkdir(parents=True, exist_ok=True)
+    out_dir = Path(cfg["evaluation"].get("output_dir", "results/repair_suite"))
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out = out_dir / "denoiser_cross_reconstruction.csv"
     df.to_csv(out, index=False)
     print(df.to_string(index=False))
     print("Saved:", out)
