@@ -1,0 +1,52 @@
+model:
+  name: gpt2
+  device: auto
+  dtype: float32
+
+vector:
+  layer: 6
+  hook_name: blocks.6.hook_resid_post
+  cache_path: results/sentiment_direction.pt
+
+denoisers:
+  gaussian:
+    checkpoint: checkpoints/denoiser_gaussian.pt
+  mixed:
+    checkpoint: checkpoints/denoiser_mixed.pt
+
+judge:
+  model_name: distilbert-base-uncased-finetuned-sst-2-english
+  batch_size: 32
+
+followup:
+  output_dir: results/inference_followups
+
+  # Primary post-hoc question: was full-strength correction simply too large?
+  # Gaussian vanilla and Gaussian DPAR are calibrated separately so magnitude
+  # and geometry are not conflated. Mixed-DPAR gets a smaller rescue sweep.
+  gaussian_vanilla_betas: [0.25, 0.50, 0.75, 1.00]
+  gaussian_dpar_betas: [0.10, 0.25, 0.50, 0.75, 1.00]
+  mixed_dpar_betas: [0.10, 0.25, 0.50, 0.75, 1.00]
+
+  # Selection uses only calibration prompts. Missing thresholds count as zero.
+  concept_thresholds: [80, 85, 90, 95]
+
+  calibration:
+    prompts_path: data/calibration_prompts.txt
+    # Dense around the regime where the original Pareto comparison was ambiguous.
+    strengths: [0.75, 1.00, 1.25, 1.50, 1.75, 2.00, 2.25, 2.50, 3.00]
+    seeds: [37]
+    max_new_tokens: 48
+    temperature: 0.9
+    top_p: 0.95
+    save_every: 1
+
+  evaluation:
+    prompts_path: data/prompts.txt
+    # Held-out prompts, frozen beta, denser alpha than the first repair suite.
+    strengths: [0.75, 1.00, 1.25, 1.50, 1.75, 2.00, 2.25, 2.50, 3.00]
+    seeds: [11, 23]
+    max_new_tokens: 64
+    temperature: 0.9
+    top_p: 0.95
+    save_every: 1
