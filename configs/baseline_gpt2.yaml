@@ -1,5 +1,5 @@
 model:
-  name: gpt2-small
+  name: gpt2
   device: auto
   dtype: float32
 
@@ -7,22 +7,25 @@ sae:
   location: resid_post_mlp
   layer: 8
   width: 128k
-  feature_id: 56907
-  feature_label: words_in_quotes
+  feature_id: 64840
+  feature_label: profanity_predictor_1
 
 steering:
   hook_name: blocks.8.hook_resid_post
-  strength_mode: norm_ratio
-  strengths: [0.0, 0.05, 0.10, 0.20, 0.35, 0.50, 0.75, 1.00]
+  strength_mode: sae_alpha
+  strengths: [0.0, 4.0, 8.0, 16.0, 24.0, 32.0, 48.0, 64.0]
   repair: identity
 
 sampling:
-  max_new_tokens: 80
+  max_new_tokens: 64
   temperature: 0.9
   top_p: 0.95
-  seeds: [11, 23, 37]
+  seeds: [11, 23]
 
 experiment:
   prompts_path: data/prompts.txt
+  calibration_prompts_path: data/calibration_prompts.txt
+  concept_metric: profanity_any_pct
   output_csv: results/baseline_samples.csv
-  save_every: 5
+  save_every: 1
+  min_concept_gain: 5.0
