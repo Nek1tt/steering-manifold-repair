@@ -60,7 +60,6 @@ def pooled_last_activation(
     tokens = model.to_tokens(text, prepend_bos=True).to(model.cfg.device)
     _, cache = model.run_with_cache(tokens, names_filter=[hook_name])
     acts = cache[hook_name][0]
-    # Exclude BOS when possible; punctuation/final sentiment tokens remain included.
     content = acts[1:] if acts.shape[0] > 1 else acts
     n = max(1, min(int(pool_last_n), int(content.shape[0])))
     return content[-n:].mean(dim=0).detach()
@@ -115,10 +114,7 @@ def build_contrastive_direction(model, cfg: dict) -> tuple[torch.Tensor, dict]:
 def save_direction(path: str | Path, direction: torch.Tensor, metadata: dict) -> None:
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    torch.save(
-        {"direction": direction.detach().cpu(), "metadata": metadata},
-        path,
-    )
+    torch.save({"direction": direction.detach().cpu(), "metadata": metadata}, path)
 
 
 def load_direction(path: str | Path, device: str | torch.device) -> tuple[torch.Tensor, dict]:
@@ -150,7 +146,10 @@ class SentimentJudge:
     def score(self, texts: list[str]) -> list[float]:
         scores: list[float] = []
         for start in range(0, len(texts), self.batch_size):
-            batch = [text if text.strip() else " " for text in texts[start : start + self.batch_size]]
+            batch = [
+                text if text.strip() else " "
+                for text in texts[start : start + self.batch_size]
+            ]
             inputs = self.tokenizer(
                 batch,
                 padding=True,
@@ -232,55 +231,75 @@ def quick_sentiment_scores(
     return rows
 
 
+def _grid_gain(rows: list[dict]) -> tuple[float, dict, float]:
+    base = next(row["sentiment_score"] for row in rows if row["strength"] == 0.0)
+    best = max(rows, key=lambda row: row["sentiment_score"])
+    return float(best["sentiment_score"] - base), best, float(base)
+
+
 def validate_sentiment_direction(cfg: dict) -> dict:
-    """Calibrate sign on held-out prompts, then require measurable concept gain."""
+    """Choose the causal sign on held-out prompts and require measurable text-level gain."""
     model = load_gpt2(cfg)
     raw_direction, vector_diag = build_contrastive_direction(model, cfg)
     prompts = load_lines(cfg["experiment"]["calibration_prompts_path"])
     judge = _make_judge(cfg, model.cfg.device)
     seed = int(cfg["sampling"]["seeds"][0])
     strengths = [float(x) for x in cfg["steering"]["strengths"]]
+    max_new_tokens = min(48, int(cfg["sampling"].get("max_new_tokens", 64)))
 
-    nonzero = [x for x in strengths if x > 0]
-    sign_probe_alpha = 1.0 if 1.0 in nonzero else nonzero[min(len(nonzero) - 1, 2)]
-    probe_strengths = [0.0, sign_probe_alpha]
-    plus = quick_sentiment_scores(
-        model, judge, prompts, raw_direction, cfg,
-        strengths=probe_strengths, seed=seed, max_new_tokens=40,
-    )
-    minus = quick_sentiment_scores(
-        model, judge, prompts, -raw_direction, cfg,
-        strengths=probe_strengths, seed=seed, max_new_tokens=40,
-    )
-    plus_gain = plus[-1]["sentiment_score"] - plus[0]["sentiment_score"]
-    minus_gain = minus[-1]["sentiment_score"] - minus[0]["sentiment_score"]
-    sign = 1.0 if plus_gain >= minus_gain else -1.0
-    direction = raw_direction * sign
-
-    rows = quick_sentiment_scores(
+    # We deliberately calibrate sign on a separate prompt set. The full alpha
+    # grid is cheap for GPT-2 Small and avoids choosing a sign from a noisy
+    # single coefficient.
+    plus_rows = quick_sentiment_scores(
         model,
         judge,
         prompts,
-        direction,
+        raw_direction,
         cfg,
         strengths=strengths,
         seed=seed,
-        max_new_tokens=min(48, int(cfg["sampling"].get("max_new_tokens", 64))),
+        max_new_tokens=max_new_tokens,
     )
-    base = next(row["sentiment_score"] for row in rows if row["strength"] == 0.0)
-    best = max(rows, key=lambda row: row["sentiment_score"])
-    gain = float(best["sentiment_score"] - base)
+    minus_rows = quick_sentiment_scores(
+        model,
+        judge,
+        prompts,
+        -raw_direction,
+        cfg,
+        strengths=strengths,
+        seed=seed,
+        max_new_tokens=max_new_tokens,
+    )
+    plus_gain, plus_best, plus_base = _grid_gain(plus_rows)
+    minus_gain, minus_best, minus_base = _grid_gain(minus_rows)
+
+    if plus_gain >= minus_gain:
+        sign = 1.0
+        direction = raw_direction
+        rows = plus_rows
+        gain = plus_gain
+        best = plus_best
+        base = plus_base
+    else:
+        sign = -1.0
+        direction = -raw_direction
+        rows = minus_rows
+        gain = minus_gain
+        best = minus_best
+        base = minus_base
+
     threshold = float(cfg["experiment"].get("min_concept_gain", 8.0))
     passed = gain >= threshold and best["strength"] > 0
 
     metadata = {
         **vector_diag,
         "sign": sign,
-        "sign_probe_alpha": sign_probe_alpha,
-        "plus_probe_gain": float(plus_gain),
-        "minus_probe_gain": float(minus_gain),
+        "plus_grid_gain": float(plus_gain),
+        "minus_grid_gain": float(minus_gain),
+        "plus_best_strength": float(plus_best["strength"]),
+        "minus_best_strength": float(minus_best["strength"]),
         "validation_best_strength": float(best["strength"]),
-        "validation_concept_gain": gain,
+        "validation_concept_gain": float(gain),
     }
     save_direction(cfg["vector"]["cache_path"], direction, metadata)
 
@@ -289,7 +308,7 @@ def validate_sentiment_direction(cfg: dict) -> dict:
         "base_sentiment": float(base),
         "best_sentiment": float(best["sentiment_score"]),
         "best_strength": float(best["strength"]),
-        "concept_gain": gain,
+        "concept_gain": float(gain),
         "rows": rows,
         "metadata": metadata,
     }
@@ -304,7 +323,8 @@ def run_sentiment_baseline(cfg: dict) -> pd.DataFrame:
     cache_path = Path(cfg["vector"]["cache_path"])
     if not cache_path.exists():
         raise FileNotFoundError(
-            f"Missing calibrated direction {cache_path}. Run scripts/validate_sentiment_baseline.py first."
+            f"Missing calibrated direction {cache_path}. "
+            "Run scripts/validate_sentiment_baseline.py first."
         )
     direction, metadata = load_direction(cache_path, model.cfg.device)
     prompts = load_lines(cfg["experiment"]["prompts_path"])
@@ -334,7 +354,9 @@ def run_sentiment_baseline(cfg: dict) -> pd.DataFrame:
                 {
                     "model": cfg["model"].get("name", "gpt2"),
                     "layer": int(cfg["vector"]["layer"]),
-                    "vector_type": cfg["vector"].get("type", "contrastive_mean_difference"),
+                    "vector_type": cfg["vector"].get(
+                        "type", "contrastive_mean_difference"
+                    ),
                     "direction_norm": float(direction.norm().item()),
                     "direction_sign": float(metadata.get("sign", 1.0)),
                     "method": cfg["steering"].get("repair", "identity"),
@@ -350,9 +372,9 @@ def run_sentiment_baseline(cfg: dict) -> pd.DataFrame:
                 }
             )
 
-        if int(cfg["experiment"].get("save_every", 1)) > 0:
-            if job_idx % int(cfg["experiment"].get("save_every", 1)) == 0:
-                pd.DataFrame(rows).to_csv(output_path, index=False)
+        save_every = int(cfg["experiment"].get("save_every", 1))
+        if save_every > 0 and job_idx % save_every == 0:
+            pd.DataFrame(rows).to_csv(output_path, index=False)
 
     df = pd.DataFrame(rows)
     df.to_csv(output_path, index=False)
@@ -378,9 +400,9 @@ def aggregate_sentiment(df: pd.DataFrame) -> pd.DataFrame:
     base_rep_quality = max(1.0 - float(base["repetition_3gram"]), 1e-8)
 
     def fluency(row) -> float:
-        # Clean-model likelihood, diversity and anti-repetition are all anchored
-        # to the unsteered generation. Each factor is capped at 1 so a collapse
-        # cannot look better merely because its NLL happens to decrease.
+        # Each factor is anchored to alpha=0 and capped at 1. This prevents a
+        # collapsed/repetitive continuation from looking "more fluent" merely
+        # because its clean-model NLL happens to decrease.
         nll_factor = math.exp(-max(0.0, float(row.nll) - base_nll))
         diversity_factor = min(1.0, max(0.0, float(row.distinct_3) / base_d3))
         rep_quality = max(0.0, 1.0 - float(row.repetition_3gram))
@@ -398,14 +420,19 @@ def sentiment_baseline_check(agg: pd.DataFrame, cfg: dict) -> dict:
     concept_threshold = float(cfg["experiment"].get("min_concept_gain", 8.0))
     fluency_threshold = float(cfg["experiment"].get("min_fluency_drop", 5.0))
 
-    higher_concept = agg[agg["concept_score"] >= base["concept_score"] + concept_threshold / 2.0]
+    higher_concept = agg[
+        agg["concept_score"] >= base["concept_score"] + concept_threshold / 2.0
+    ]
     if higher_concept.empty:
         max_fluency_drop = 0.0
     else:
-        max_fluency_drop = float(base["fluency_score"] - higher_concept["fluency_score"].min())
+        max_fluency_drop = float(
+            base["fluency_score"] - higher_concept["fluency_score"].min()
+        )
 
     return {
-        "passed": concept_gain >= concept_threshold and max_fluency_drop >= fluency_threshold,
+        "passed": concept_gain >= concept_threshold
+        and max_fluency_drop >= fluency_threshold,
         "concept_gain": concept_gain,
         "best_strength": float(best["strength"]),
         "best_concept_score": float(best["concept_score"]),
@@ -414,7 +441,9 @@ def sentiment_baseline_check(agg: pd.DataFrame, cfg: dict) -> dict:
     }
 
 
-def plot_sentiment_pareto(df: pd.DataFrame, cfg: dict) -> tuple[pd.DataFrame, dict]:
+def plot_sentiment_pareto(
+    df: pd.DataFrame, cfg: dict
+) -> tuple[pd.DataFrame, dict]:
     agg = aggregate_sentiment(df)
     check = sentiment_baseline_check(agg, cfg)
     output = Path(cfg["experiment"]["output_plot"])
@@ -423,12 +452,23 @@ def plot_sentiment_pareto(df: pd.DataFrame, cfg: dict) -> tuple[pd.DataFrame, di
     fig, ax = plt.subplots(figsize=(8.0, 5.8))
     for method, part in agg.groupby("method"):
         part = part.sort_values("strength")
-        ax.plot(part["fluency_score"], part["concept_score"], marker="o", label=method)
+        ax.plot(
+            part["fluency_score"],
+            part["concept_score"],
+            marker="o",
+            label=method,
+        )
         for row in part.itertuples():
-            ax.annotate(f"{row.strength:g}", (row.fluency_score, row.concept_score), fontsize=8)
+            ax.annotate(
+                f"{row.strength:g}",
+                (row.fluency_score, row.concept_score),
+                fontsize=8,
+            )
     ax.set_xlim(0, 102)
     ax.set_ylim(0, 100)
-    ax.set_xlabel("Fluency score ↑  (clean-NLL × distinct-3 × anti-repetition)")
+    ax.set_xlabel(
+        "Fluency score ↑  (clean-NLL × distinct-3 × anti-repetition)"
+    )
     ax.set_ylabel("Positive sentiment score ↑  (local independent judge)")
     ax.set_title("GPT-2 midpoint contrastive steering Pareto baseline")
     ax.grid(alpha=0.25)
