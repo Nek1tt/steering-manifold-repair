@@ -1,7 +1,5 @@
 # Repair suite: Gaussian denoiser, DPAR и structured corruption
 
-Дата: 2026-08-23.
-
 ## Что проверяется
 
 На замороженном sentiment baseline сравниваются:
