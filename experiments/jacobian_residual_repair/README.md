@@ -1,226 +1,107 @@
 # Experiment 007 — Jacobian Residual Repair (JRR)
 
-Date: 2026-08-23
+Дата: 2026-08-23.
 
-## Research question
+## Исследовательский вопрос
 
-Strong activation steering is normally treated as a problem at the intervention layer itself. JRR tests a different hypothesis: the main fluency failure may be created **after** the intervention, when a large activation displacement propagates nonlinearly through later Transformer blocks.
+Предыдущие эксперименты анализировали repair в точке вмешательства. JRR проверяет другую гипотезу: сильный activation displacement может ломать fluency **после** source layer, потому что последующие Transformer blocks реагируют нелинейно.
 
-Let `F` map the source residual state at layer 6 to a downstream residual state. For clean state `h`, steering direction `v`, and strength `alpha`:
+Для downstream map `F`, clean state `h`, steering direction `v` и силы `alpha`:
 
-```text
-y0      = F(h)
-y_alpha = F(h + alpha v)
-t       = J_F(h) v
-R_alpha = y_alpha - y0 - alpha t
-```
+\[
+y_0=F(h),\qquad y_\alpha=F(h+\alpha v),
+\]
 
-`t` is the first-order transported steering direction. `R_alpha` is the exact nonlinear Taylor remainder.
+\[
+t=J_F(h)v,
+\]
 
-The central mechanistic hypothesis is:
+\[
+R_\alpha=y_\alpha-y_0-\alpha t.
+\]
 
-1. useful concept steering is carried substantially by the first-order term `alpha * t`;
-2. fluency degradation grows with the nonlinear remainder;
-3. the most harmful part is the component of the remainder orthogonal to `t`.
+`t` — first-order transported steering direction, `R_alpha` — точный nonlinear Taylor remainder.
 
-The proposed oracle intervention is therefore
+Разлагаем
 
-```text
-R_parallel = proj_t(R_alpha)
-R_orth     = R_alpha - R_parallel
+\[
+R_\parallel=\operatorname{proj}_t(R_\alpha),
+\qquad
+R_\perp=R_\alpha-R_\parallel.
+\]
 
-y_repaired = y_alpha - beta * R_orth
-```
+Oracle JRR применяет
 
-with `beta=1` in the first decisive test.
+\[
+y_{repair}=y_\alpha-\beta R_\perp,
+\]
 
-This differs from DPAR. DPAR constrains a learned denoiser correction at the steering layer. JRR directly measures the **downstream nonlinear effect caused by the model's own dynamics** and removes only the part collateral to the locally transported steering direction.
+с заранее фиксированным `beta=1`.
 
-## Scientific protocol
+Это принципиально отличается от DPAR: DPAR защищает steering axis в correction обученного denoiser на source layer, а JRR измеряет **нелинейный ответ самой модели downstream**.
 
-The experiment has two hard-separated stages.
+## Протокол
 
-### Stage A — diagnostic, calibration prompts only
+Эксперимент жёстко разделён на стадии.
 
-Run exact directional JVPs at downstream layers 7–11 and measure `R_alpha` over the alpha grid. Separately run short additive generations on the same calibration prompts.
+### A. Mechanistic diagnostic
 
-We test three predictions:
+Только calibration prompts. Для downstream layers 7–11 вычисляется directional JVP и измеряется `R_alpha`.
 
-- `||R_alpha||` should grow superlinearly; a log-log slope near 2 is especially supportive of a second-order regime;
-- `||R_orth||` should correlate positively with NLL and/or negatively with fluency;
-- a nontrivial fraction of the nonlinear remainder should be orthogonal to `Jv`.
+Проверяются предсказания:
 
-The code selects a candidate downstream layer using only calibration data and writes an explicit go/no-go decision.
+- `||R_alpha||` растёт сверхлинейно; slope около 2 соответствует second-order regime;
+- большая часть остатка не обязана быть parallel `Jv`;
+- рост `R_orth` должен быть связан с деградацией fluency/NLL.
 
-### Stage B — causal oracle repair
+Target layer выбирается только по calibration data.
 
-Only if Stage A is positive, generate with the exact per-token counterfactual remainder and subtract `R_orth` at the selected downstream layer.
+### B. Causal oracle
 
-Calibration compares:
+На выбранном layer exact per-token counterfactual remainder удаляется во время autoregressive generation.
 
-```text
-additive
-jrr_orth
-```
+Calibration сравнивает `additive` и `jrr_orth`. Held-out разрешается только после прохождения заранее заданного calibration gate. После просмотра held-out target layer, `beta`, thresholds, prompts и seeds не подстраиваются.
 
-If JRR improves the interpolated concept/fluency frontier by at least 2 fluency points at one frozen concept threshold, the held-out evaluation unlocks.
+## Почему это oracle
 
-Held-out evaluation then uses the original `data/prompts.txt` and seeds `11,23`. Do not tune after looking at those results.
+Exact JRR дорог: для каждого generated token нужны clean/counterfactual forwards и directional derivative. Цель — не deployment, а причинный вопрос:
 
-## Why this starts as an oracle
+> Если бы nonlinear collateral response была известна точно, восстановило бы её удаление fluency без потери steering semantics?
 
-The exact JRR intervention is intentionally expensive: every generated token needs clean/counterfactual model evaluations plus a directional derivative. That is a feature of this experiment, not a final deployment design.
+Ответ оказался сложнее исходной гипотезы; результаты находятся в [`RESULTS.md`](RESULTS.md).
 
-The oracle answers the causal question first:
+## Важная корректировка протокола
 
-> If the nonlinear collateral remainder were known exactly, would removing it recover fluency while preserving steering?
+Первый короткий calibration attempt использовал несовпадающие с diagnostic behavior probe generation length/grid и не достигал даже требуемой concept support у additive control. Этот run был признан **невалидным для causal conclusion** до открытия held-out.
 
-Only after a positive oracle result should an amortized residual adapter be trained and published as the final Hugging Face checkpoint.
+Финальный calibration был перезапущен с согласованными 8 prompts, 32-token generation, полным alpha grid и seed `37`; target layer и `beta=1` не менялись. В публичном архиве оставлены только итоговые evidence tables.
 
-## Files
-
-Implementation:
-
-```text
-configs/jrr_gpt2.yaml
-src/steering_repair/jrr.py
-src/steering_repair/jrr_diagnostic.py
-src/steering_repair/jrr_oracle.py
-scripts/run_jrr_diagnostic.py
-scripts/run_jrr_oracle.py
-tests/test_jrr.py
-notebooks/jrr_experiment_colab.ipynb
-```
-
-Generated outputs under `results/jrr/`:
-
-```text
-diagnostic_samples.csv
-diagnostic_aggregate.csv
-behavior_samples.csv
-behavior_aggregate.csv
-target_layer_summary.csv
-diagnostic_summary.json
-DIAGNOSTIC.md
-remainder_scaling.png
-orthogonal_remainder_fraction.png
-orthogonal_remainder_vs_fluency.png
-
-oracle_calibration_samples.csv
-oracle_calibration_aggregate.csv
-oracle_calibration_frontier.csv
-oracle_calibration_summary.json
-ORACLE_CALIBRATION.md
-oracle_calibration_pareto.png
-
-# only after calibration passes:
-oracle_evaluation_samples.csv
-oracle_evaluation_aggregate.csv
-oracle_evaluation_frontier.csv
-oracle_evaluation_summary.json
-oracle_evaluation_pareto.png
-```
-
-## Run instructions
-
-### 0. Install and make sure the frozen sentiment direction exists
+## Воспроизведение
 
 ```bash
 pip install -r requirements.txt
 pip install -e .
 
-python scripts/validate_sentiment_baseline.py \
-  --config configs/baseline_sentiment_gpt2.yaml
-```
-
-If `results/sentiment_direction.pt` already exists from the frozen baseline, do not rebuild or retune it.
-
-### 1. Unit tests
-
-```bash
 pytest -q tests/test_jrr.py tests/test_inference_followups.py tests/test_denoiser.py
-```
 
-The JRR tests verify:
-
-- parallel/orthogonal decomposition;
-- the protected transported component;
-- the full-linearization ablation;
-- exact `alpha^2` Taylor remainder on a synthetic quadratic system;
-- agreement of autograd JVP with a central finite difference.
-
-### 2. Run the cheap mechanistic diagnostic
-
-```bash
+python scripts/preflight_jrr.py --config configs/jrr_gpt2.yaml
 python scripts/run_jrr_diagnostic.py --config configs/jrr_gpt2.yaml
+python scripts/run_jrr_oracle.py --config configs/jrr_gpt2.yaml --phase calibration
+# evaluation запускается только если calibration gate открыт
+python scripts/run_jrr_oracle.py --config configs/jrr_gpt2.yaml --phase evaluation
 ```
 
-Then inspect:
+Notebook: [`../../notebooks/jrr_experiment_colab.ipynb`](../../notebooks/jrr_experiment_colab.ipynb).
 
-```text
-results/jrr/DIAGNOSTIC.md
-results/jrr/target_layer_summary.csv
-results/jrr/remainder_scaling.png
-results/jrr/orthogonal_remainder_vs_fluency.png
-```
+## Ключевые сохранённые файлы
 
-The most important fields are:
+- `diagnostic_target_summary.csv` — выбор downstream layer;
+- `calibration_frontier.csv` — финальный валидный calibration;
+- `heldout_aggregate.csv` — held-out aggregate;
+- `heldout_frontier_frozen_thresholds.csv` — заранее заданные C80/C85/C90 thresholds;
+- `heldout_same_alpha_deltas.csv` — causal same-alpha comparison;
+- `heldout_seed_deltas.csv` — sensitivity по seeds;
+- `heldout_paired_bootstrap.csv` — post-hoc descriptive bootstrap;
+- `heldout_exploratory_frontier.csv` — явно exploratory within-support frontier.
 
-- `loglog_residual_slope` — near 2 supports second-order growth;
-- `rank_corr_orthogonal_residual_vs_nll` — positive is supportive;
-- `rank_corr_orthogonal_residual_vs_fluency` — negative is supportive;
-- `mean_orthogonal_fraction` — tells us whether JRR has meaningful collateral distortion to remove;
-- `oracle_recommended` — automatic compute gate.
-
-If autograd JVP is unsupported by the installed TransformerLens/PyTorch combination, the experiment automatically falls back to central finite differences and records that fact in `jvp_modes_used`.
-
-### 3. Run oracle calibration only if the diagnostic is promising
-
-```bash
-python scripts/run_jrr_oracle.py \
-  --config configs/jrr_gpt2.yaml \
-  --phase calibration
-```
-
-Inspect:
-
-```text
-results/jrr/ORACLE_CALIBRATION.md
-results/jrr/oracle_calibration_pareto.png
-```
-
-The script refuses to run this expensive stage if the diagnostic gate is negative. `--force` exists only for a deliberate ablation and should not be used to manufacture a positive result.
-
-### 4. Held-out evaluation — only after calibration passes
-
-```bash
-python scripts/run_jrr_oracle.py \
-  --config configs/jrr_gpt2.yaml \
-  --phase evaluation
-```
-
-This command is locked unless `oracle_calibration_summary.json` contains `go_to_heldout: true`.
-
-## Decision table
-
-### Strong positive
-
-Diagnostic signal is clear and oracle JRR improves the frontier.
-
-Next experiment: train a small adapter to predict `R_orth` from `(h, v, alpha)` across multiple training steering directions. This becomes the efficient method and Hugging Face checkpoint.
-
-### Mechanistic positive, oracle negative
-
-`R_orth` strongly tracks degradation but removing it does not restore fluency.
-
-Conclusion: nonlinear collateral propagation is a marker of steering failure but not by itself the causal bottleneck. This is still a useful mechanistic result; do not train an adapter.
-
-### Diagnostic negative
-
-The remainder either stays small, is mostly transported-direction parallel, or fails to track behavioral degradation.
-
-Stop JRR immediately. The hypothesis is falsified cheaply, without touching held-out evaluation.
-
-## Important methodological constraint
-
-Do not tune target layer, beta, thresholds, prompts, or alpha grid after seeing held-out results. The entire purpose of the diagnostic/calibration split is to make a positive result defensible rather than post-hoc.
+Следующий selective test, уже выполненный после JRR: [`../selective_jrr/`](../selective_jrr/).
