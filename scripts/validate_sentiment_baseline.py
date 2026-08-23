@@ -19,10 +19,10 @@ def main() -> None:
     print(f"  direction norm:        {meta['direction_norm']:.4f}")
     print(f"  projection gap:        {meta['projection_gap']:.4f}")
     print(f"  calibrated sign:       {meta['sign']:+.0f}")
-    print(f"  + probe gain:          {meta['plus_probe_gain']:+.2f} points")
-    print(f"  - probe gain:          {meta['minus_probe_gain']:+.2f} points")
+    print(f"  + grid best gain:      {meta['plus_grid_gain']:+.2f} points")
+    print(f"  - grid best gain:      {meta['minus_grid_gain']:+.2f} points")
 
-    print("\nCalibration positive-sentiment score:")
+    print("\nCalibration positive-sentiment score for the selected sign:")
     for row in result["rows"]:
         print(
             f"  alpha={row['strength']:>5g}  "
@@ -39,7 +39,10 @@ def main() -> None:
             "\nSENTIMENT VECTOR VALIDATION: FAIL. Do not run the full baseline. "
             "Send this stdout back for diagnosis."
         )
-    print("\nSENTIMENT VECTOR VALIDATION: PASS — calibrated direction saved to results/sentiment_direction.pt")
+    print(
+        "\nSENTIMENT VECTOR VALIDATION: PASS — calibrated direction saved to "
+        "results/sentiment_direction.pt"
+    )
 
 
 if __name__ == "__main__":
