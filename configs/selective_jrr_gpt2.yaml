@@ -12,8 +12,8 @@ judge:
   model_name: distilbert-base-uncased-finetuned-sst-2-english
   batch_size: 32
 
-# model_directional_jvp currently reads numerical JVP settings from this section.
-# These values are copied from the frozen JRR experiment and are not retuned.
+# model_directional_jvp читает численные JVP-настройки из этой секции.
+# Значения скопированы из frozen JRR experiment и не перенастраиваются.
 jrr:
   diagnostic:
     jvp_mode: autograd
@@ -24,15 +24,15 @@ selective_jrr:
   output_dir: results/selective_jrr
   source_hook: blocks.6.hook_resid_post
 
-  # Frozen from Experiment 007 before this method is evaluated.
+  # Зафиксировано по Experiment 007 до оценки нового метода.
   target_hook: blocks.7.hook_resid_post
 
-  # No beta sweep: the scientific question is whether mode selection, not
-  # correction magnitude tuning, fixes the full-JRR semantic failure.
+  # Beta sweep отсутствует: проверяется именно mode selection, а не tuning
+  # величины correction после просмотра результата full JRR.
   beta: 1.0
   positive_only: true
 
-  # Descriptive only. The primary decision criterion is the same-alpha gate.
+  # Только описательная frontier-диагностика; основной criterion — same-alpha gate.
   concept_thresholds: [70, 75, 80]
 
   calibration:
@@ -45,17 +45,15 @@ selective_jrr:
     temperature: 0.9
     top_p: 0.95
 
-    # Frozen before the new held-out is opened. KL-JRR must recover at least
-    # five fluency points over additive while losing no more than five concept
-    # points at one strong-steering operating point.
+    # Gate заморожен до открытия нового held-out: хотя бы в одной strong point
+    # требуется +5 fluency к additive при потере не более 5 concept points.
     strong_strengths: [2.25, 3.0, 4.0]
     gate_min_fluency_gain: 5.0
     gate_max_concept_loss: 5.0
 
-  # NEW hold-out created only after Experiment 007 was analyzed. We evaluate
-  # exactly the strong-steering regime that motivated selective repair, and keep
-  # full JRR as a direct causal control. This is both cheaper and more decisive
-  # than another broad alpha sweep.
+  # Новый held-out создан только после анализа Experiment 007. Здесь проверяется
+  # ровно strong-steering regime, который мотивировал selective repair; full JRR
+  # остаётся прямым causal control.
   evaluation:
     prompts_path: data/selective_jrr_heldout_prompts.txt
     max_prompts: 12
