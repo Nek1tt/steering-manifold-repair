@@ -1,188 +1,128 @@
 # Steering Manifold Repair
 
-Mechanistic-interpretability project on **coherence-preserving activation steering** in GPT-2 Small.
+Исследовательский проект по механистической интерпретируемости: **как уменьшить потерю связности текста при сильном activation steering** в GPT-2 Small.
 
-The project begins with the standard failure mode: stronger activation steering increases the target concept but eventually damages language-model coherence. We reproduce that trade-off, evaluate learned activation denoisers, and then follow the failures of those methods into two new mechanistic hypotheses about why strong steering breaks downstream computation.
+Вместо одного «лучшего трюка» работа последовательно разбирает два разных механизма деградации и проверяет гипотезы, возникающие из ошибок предыдущих методов.
 
-## Final results
+## Главное
 
-The complete final report is in [`FINAL_RESULTS.md`](FINAL_RESULTS.md).
+Полный отчёт: **[`report/README.md`](report/README.md)**.
 
-The main research contributions are:
+Лучший обученный checkpoint опубликован открыто на Hugging Face:
 
-1. **Direction-Preserving Activation Repair (DPAR).** Vanilla activation denoising increasingly cancels the requested steering direction. DPAR removes that parallel correction exactly, preserving requested alpha to numerical precision. Full DPAR retains a local held-out high-concept advantage (`F@C90=71.45` vs additive `66.46`).
-2. **Jacobian Residual Repair (JRR).** Strong steering creates a downstream nonlinear Taylor remainder whose norm grows approximately as `alpha^1.9849`, almost exactly the second-order prediction. In the strong regime the nonlinear response becomes comparable in norm to the entire first-order transported steering effect. Causal removal recovers fluency but reveals that some orthogonal nonlinear computation also carries useful concept information.
-3. **KL-Selective JRR.** A follow-up preregistered after JRR isolates a compact local KL-sensitive mode inside the nonlinear remainder. Across strong calibration strengths it removes only `7.93%` of `R_orth` on average while lowering local KL by `41.6%`, but it fails the frozen long-horizon concept/fluency gate. The newly frozen held-out was therefore intentionally not opened.
+**https://huggingface.co/Nek1tt/steering-repair-gpt2**
 
-The strongest combined claim is mechanistic rather than universal-SOTA:
+Основные результаты:
 
-> Coherence loss under strong steering arises from at least two separable failures: learned denoisers can cancel the requested steering axis, while the model's own downstream nonlinear response becomes large enough to rival the first-order steering effect. That nonlinear response contains both fluency-damaging and concept-carrying computation, so preserving only the original steering direction—or even its locally transported image—is not sufficient.
+1. **DPAR (Direction-Preserving Activation Repair).** Обычный Gaussian-denoiser при сильном steering частично улучшает связность просто потому, что отменяет сам steering. DPAR удаляет из поправки компоненту вдоль steering-вектора и сохраняет запрошенный `alpha` с численной точностью. В финальном плотном held-out sweep полный DPAR дал локальный выигрыш на высоком concept: `F@C90 = 71.45` против `66.46` у additive steering (`+4.99`). Это локальный, а не универсальный Pareto-выигрыш.
+2. **JRR (Jacobian Residual Repair).** Сильный steering создаёт большой downstream-нелинейный остаток Тейлора. Его норма растёт примерно как `alpha^1.9849`, а при `alpha=3` становится почти равной по масштабу всему first-order эффекту `alpha Jv`. Причинное удаление остатка улучшает fluency/NLL, но показывает, что часть нелинейной динамики одновременно несёт полезный concept-сигнал.
+3. **KL-Selective JRR.** Следующая гипотеза удаляет только локально KL-вредную компоненту нелинейного остатка. В сильном режиме она составляет в среднем лишь **7.93%** нормы `R_orth`, но уменьшает локальный KL на **41.6%**. Однако заранее зафиксированный сильный calibration gate не пройден: локальная next-token геометрия не гарантирует сохранение long-horizon concept. Новый held-out поэтому не открывался.
 
-## Experiment archive
+Главный механистический вывод:
 
-| experiment | role | result |
-|---|---|---|
-| [`failed_sae_profanity/`](experiments/failed_sae_profanity/) | vector validation | negative: concept score did not move |
-| [`successful_sentiment_baseline/`](experiments/successful_sentiment_baseline/) | frozen additive baseline | positive trade-off reproduced |
-| [`repair_suite/`](experiments/repair_suite/) | denoiser + DPAR + structured corruption | DPAR mechanism validated; structured corruption negative |
-| [`retrained_gaussian_followups/`](experiments/retrained_gaussian_followups/) | fresh retrain + dense held-out | deterministic retrain; local DPAR gains |
-| [`jacobian_residual_repair/`](experiments/jacobian_residual_repair/) | new nonlinear-propagation hypothesis | strong mechanistic positive, mixed practical oracle |
-| [`selective_jrr/`](experiments/selective_jrr/) | harmful-mode-selective follow-up | partial/negative; fresh held-out kept untouched |
+> Деградация при сильном steering состоит как минимум из двух разных эффектов: learned repair может отменять сам steering, а собственная downstream-динамика модели становится существенно нелинейной. При этом «ортогонально steering-направлению» не означает «семантически неважно». Поэтому качественный repair должен сохранять больше, чем исходную steering-ось или её локальный first-order образ.
 
-Negative results and failed hypotheses are retained deliberately.
+## Экспериментальная схема
 
-## Core setup
-
-The successful baseline uses a persona-style sentiment direction
+Успешный baseline использует contrastive sentiment direction в середине GPT-2 Small:
 
 \[
-v = \mathbb{E}[h\mid\text{positive}] - \mathbb{E}[h\mid\text{negative}]
+v = \mathbb{E}[h\mid\text{positive}] - \mathbb{E}[h\mid\text{negative}],
 \]
 
-at
-
-```text
-blocks.6.hook_resid_post
-```
-
-with literal response-token steering
+в точке `blocks.6.hook_resid_post` с интервенцией
 
 \[
 h' = h + \alpha v.
 \]
 
-The concept score rises from roughly 28 to above 90 while sufficiently strong steering collapses fluency.
+Concept score — вероятность positive sentiment по независимому локальному SST-2 classifier. Fluency score объединяет clean-model NLL, `distinct-3` и штраф за повторение 3-грамм, нормированный относительно `alpha=0`.
 
-## DPAR
+Baseline воспроизводит требуемый trade-off: concept растёт примерно с `27.9` до `95+`, а fluency при сильном steering падает со `100` до значений порядка `18` и ниже.
 
-For steered activation
+> Тексты prompts и sentiment-примеров в `data/` оставлены на английском намеренно: GPT-2 и sentiment judge тестировались на английской генерации. Это экспериментальные данные, а не документация.
 
-\[
-z=h+\alpha v
-\]
+## Архив экспериментов
 
-and denoiser correction
+| Эксперимент | Роль | Итог |
+|---|---|---|
+| [`failed_sae_profanity`](experiments/failed_sae_profanity/) | первая проверка SAE-вектора | отрицательный контроль: concept не изменился |
+| [`successful_sentiment_baseline`](experiments/successful_sentiment_baseline/) | валидированный additive baseline | требуемый Pareto trade-off воспроизведён |
+| [`repair_suite`](experiments/repair_suite/) | Gaussian denoiser, DPAR, structured corruption | найдено steering cancellation; structured corruption не помог |
+| [`retrained_gaussian_followups`](experiments/retrained_gaussian_followups/) | свежий retrain + dense sweep | детерминированный retrain; локальный DPAR-выигрыш `+4.99` на C90 |
+| [`jacobian_residual_repair`](experiments/jacobian_residual_repair/) | новая гипотеза о downstream-нелинейности | сильный mechanistic result, mixed practical oracle |
+| [`selective_jrr`](experiments/selective_jrr/) | selective repair нелинейного остатка | частично положительный механизм, strong-regime gate не пройден |
 
-\[
-\Delta=D(z)-z,
-\]
+Отрицательные результаты сохранены намеренно: они показывают, какие интуитивные объяснения не выдержали причинной проверки.
 
-DPAR applies only
+## Воспроизведение
 
-\[
-\Delta_\perp=\Delta-\operatorname{proj}_v(\Delta),
-\]
-
-so
-
-\[
-h_{\mathrm{DPAR}}=z+\Delta_\perp.
-\]
-
-This prevents the repair method from obtaining apparent fluency improvements merely by undoing steering.
-
-## JRR
-
-For downstream map `F`, JRR measures
-
-\[
-R_\alpha = F(h+\alpha v)-F(h)-\alpha J_F(h)v.
-\]
-
-The observed near-quadratic growth and causal interventions are documented in [`experiments/jacobian_residual_repair/RESULTS.md`](experiments/jacobian_residual_repair/RESULTS.md).
-
-## Installation
-
-### Linux / Colab
+Установка:
 
 ```bash
 pip install -r requirements.txt
 pip install -e .
 ```
 
-### Windows + NVIDIA GPU + VS Code Jupyter
-
-See [`LOCAL_WINDOWS_VSCODE.md`](LOCAL_WINDOWS_VSCODE.md).
-
-Recommended local notebook for the latest experiment:
-
-```text
-notebooks/selective_jrr_vscode_windows.ipynb
-```
-
-## Reproduction entry points
-
-Additive baseline:
-
-```text
-notebooks/baseline_colab.ipynb
-```
-
-Denoiser / DPAR suite:
-
-```text
-notebooks/repair_experiments_colab.ipynb
-```
-
-Fresh deterministic Gaussian retrain + dense DPAR follow-up:
-
-```text
-notebooks/retrain_gaussian_followups_fresh_colab.ipynb
-```
-
-JRR:
-
-```text
-notebooks/jrr_experiment_colab.ipynb
-```
-
-KL-Selective JRR on Windows/VS Code:
-
-```text
-notebooks/selective_jrr_vscode_windows.ipynb
-```
-
-## Tests
+Тесты:
 
 ```bash
 pytest -q
 ```
 
-Focused final-method tests:
-
-```bash
-pytest -q tests/test_denoiser.py tests/test_inference_followups.py tests/test_jrr.py tests/test_selective_jrr.py
-```
-
-## Hugging Face checkpoint
-
-The best practical learned component is the deterministically reproduced Gaussian activation denoiser used with DPAR.
-
-**Public checkpoint:** [Nek1tt/steering-repair-gpt2](https://huggingface.co/Nek1tt/steering-repair-gpt2)
-
-The Hugging Face repository contains the trained checkpoint together with its model card, metadata, frozen training configuration, and training history. DPAR itself is inference-time geometry applied to the denoiser correction and is not encoded in the checkpoint weights.
-
-Packaging files are retained in this repository:
+Основные notebooks, по одному на этап:
 
 ```text
-huggingface/MODEL_CARD.md
-scripts/publish_best_checkpoint_hf.py
+notebooks/baseline_colab.ipynb
+notebooks/repair_experiments_colab.ipynb
+notebooks/retrain_gaussian_followups_fresh_colab.ipynb
+notebooks/jrr_experiment_colab.ipynb
+notebooks/selective_jrr_experiment_colab.ipynb
 ```
 
-## Reproducibility rules
+Конфиги экспериментов находятся в `configs/`, реализация — в `src/steering_repair/`, компактные итоговые таблицы — рядом с соответствующими `experiments/*/README.md` и `RESULTS.md`.
 
-- Frozen baseline prompts/seeds are not retuned for repair methods.
-- Evaluation steering vectors are not used to train denoisers.
-- Pareto comparisons use dense/interpolated frontiers where appropriate.
-- Repair geometry is inspected to rule out steering cancellation.
-- New methods motivated by held-out results receive a newly frozen held-out split.
-- Failed gates are not relaxed post hoc.
-- Negative results and ablations remain in the repository.
+## Hugging Face
 
-## References
+Публичный репозиторий лучшего practical learned component:
+
+**https://huggingface.co/Nek1tt/steering-repair-gpt2**
+
+Там сохранены:
+
+- `retrained_denoiser_gaussian.pt` — веса Gaussian activation denoiser;
+- `checkpoint_metadata.json` — метаданные архитектуры и обучения;
+- `training_config.yaml` — конфиг воспроизведения;
+- `training_history.json` — история обучения;
+- `README.md` — model card.
+
+DPAR — это inference-time геометрия поверх этого checkpoint, а не отдельные обученные веса.
+
+## Ограничения
+
+- Основная модель — GPT-2 Small.
+- Основной валидированный steering-вектор — sentiment/persona-style direction.
+- Sentiment judge шумный и немонотонный по `alpha`, поэтому Pareto-результаты интерпретируются локально и с оговорками.
+- JRR и KL-JRR — дорогие oracle/diagnostic методы для причинного анализа, а не готовые deployment-алгоритмы.
+- Работа не заявляет универсального доминирования additive steering; основной вклад — сочетание практического DPAR-результата и механистического анализа причин деградации.
+
+## Структура
+
+```text
+report/        финальный отчёт
+experiments/   компактные результаты и разбор отдельных экспериментов
+notebooks/     воспроизводимые сценарии запуска
+configs/       зафиксированные конфиги
+src/           реализация методов
+scripts/       CLI для обучения, evaluation и preflight
+ tests/         unit tests
+huggingface/   шаблон model card и публикация checkpoint
+```
+
+## Ссылки
 
 - TransformerLens: https://github.com/TransformerLensOrg/TransformerLens
-- OpenAI sparse autoencoder: https://github.com/openai/sparse_autoencoder
+- OpenAI Sparse Autoencoder: https://github.com/openai/sparse_autoencoder
 - SAELens: https://github.com/decoderesearch/SAELens
 - Persona Vectors: https://github.com/safety-research/persona_vectors
 - Generative Latent Prior: https://generative-latent-prior.github.io/
