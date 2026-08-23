@@ -10,45 +10,45 @@ JRR показал, что full removal `R_orth` может вернуть fluen
 
 Как и в JRR:
 
-\[
+$$
 y_0=F(h),\qquad y_\alpha=F(h+\alpha v),
-\]
+$$
 
-\[
+$$
 t=J_F(h)v,
 \qquad
 R=y_\alpha-y_0-\alpha t,
-\]
+$$
 
-\[
+$$
 R_\perp=R-\operatorname{proj}_t(R).
-\]
+$$
 
 Далее на steered downstream state вычисляется локальный clean-distribution objective:
 
-\[
+$$
 L_{KL}(y)=KL(p_{clean}\|p_y),
 \qquad
 g=\nabla_yL_{KL}(y_\alpha).
-\]
+$$
 
 Чтобы не менять first-order transported steering, gradient ортогонализуется относительно `t`:
 
-\[
+$$
 g_\perp=g-\operatorname{proj}_t(g).
-\]
+$$
 
 Из `R_orth` выбирается только KL-increasing component:
 
-\[
+$$
 c=\max\left(0,\frac{\langle R_\perp,g_\perp\rangle}{\|g_\perp\|^2}\right),
-\]
+$$
 
-\[
+$$
 R_{harm}=c\,g_\perp,
 \qquad
 y_{repair}=y_\alpha-R_{harm}.
-\]
+$$
 
 `beta=1` зафиксирован заранее; layer sweep и beta sweep не проводятся.
 
